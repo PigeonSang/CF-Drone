@@ -14,7 +14,7 @@ public:
 	float derivative = 0;
 	float integral = 0;
 
-	LowPassFilter<float> lpf; // low pass filter for derivative term
+	LowPassFilter<float> lpf; // 微分项低通滤波器
 
 	PID(float p, float i, float d, float windup = 0, float dAlpha = 1, float dtMax = 0.1) :
 		p(p), i(i), d(d), windup(windup), lpf(dAlpha), dtMax(dtMax) {}
@@ -24,7 +24,7 @@ public:
 
 		if (dt > 0 && dt < dtMax) {
 			integral += error * dt;
-			derivative = lpf.update((error - prevError) / dt); // compute derivative and apply low-pass filter
+			derivative = lpf.update((error - prevError) / dt); // 计算导数并应用低通滤波器
 		} else {
 			integral = 0;
 			derivative = 0;

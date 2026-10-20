@@ -68,14 +68,14 @@ void readIMU() {
 
 void calibrateGyroOnce() {
 	static Delay landedDelay(2);
-	if (!landedDelay.update(landed)) return; // calibrate only if definitely stationary
+	if (!landedDelay.update(landed)) return; // 仅在设备完全静止时进行校准
 
 	gyroBias = gyroBiasFilter.update(gyro);
 }
 
 void calibrateAccel() {
 	print("校准陀螺仪加速计 Calibrating accelerometer\n");
-	imu.setAccelRange(imu.ACCEL_RANGE_2G); // the most sensitive mode
+	imu.setAccelRange(imu.ACCEL_RANGE_2G); // 最灵敏模式
 
 	print("1/6 水平放置：机头朝前（正常飞行方向），底部朝下水平放置在平坦表面，确保完全水平无倾斜。保持不动，8秒后开始校准；\n");
 	pause(8);
@@ -132,14 +132,14 @@ void calibrateAccelOnce() {
 	}
 	acc = acc / samples;
 
-	// Update the maximum and minimum values
+	// 更新最大值与最小值
 	if (acc.x > accMax.x) accMax.x = acc.x;
 	if (acc.y > accMax.y) accMax.y = acc.y;
 	if (acc.z > accMax.z) accMax.z = acc.z;
 	if (acc.x < accMin.x) accMin.x = acc.x;
 	if (acc.y < accMin.y) accMin.y = acc.y;
 	if (acc.z < accMin.z) accMin.z = acc.z;
-	// Compute scale and bias
+	// 计算缩放系数与偏置
 	accScale = (accMax - accMin) / 2 / ONE_G;
 	accBias = (accMax + accMin) / 2;
 }

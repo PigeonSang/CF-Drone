@@ -111,7 +111,7 @@ void interpretControls() {
 	else if (controlMode <= 0.75) mode = flightModes[1];
 	else if (controlMode > 0.75) mode = flightModes[2];
 
-	if (mode == AUTO) return; // pilot is not effective in AUTO mode
+	if (mode == AUTO) return; // 自动驾驶仪在自动模式下无效
 
 #if WEB_RC_ENABLED
 	if (!isUsingWebRC()) { // SBUS手势解锁仅当WebRC未活跃时生效
@@ -167,21 +167,21 @@ void interpretControls() {
 	}
 
 	if (mode == ACRO) {
-		attitudeTarget.invalidate(); // skip attitude control
+		attitudeTarget.invalidate(); // 跳过姿态控制
 		ratesTarget.x = controlRoll * maxRate.x;
 		ratesTarget.y = controlPitch * maxRate.y;
-		ratesTarget.z = -controlYaw * maxRate.z; // positive yaw stick means clockwise rotation in FLU
+		ratesTarget.z = -controlYaw * maxRate.z; // 正偏航杆指令在FLU坐标系中代表顺时针旋转
 	}
 
-	if (mode == RAW) { // direct torque control
-		attitudeTarget.invalidate(); // skip attitude control
-		ratesTarget.invalidate(); // skip rate control
+	if (mode == RAW) { // 直接转矩控制
+		attitudeTarget.invalidate(); // 跳过姿态控制
+		ratesTarget.invalidate(); // 跳码率控制
 		torqueTarget = Vector(controlRoll, controlPitch, -controlYaw) * 0.1;
 	}
 }
 
 void controlAttitude() {
-	if (!armed || attitudeTarget.invalid() || thrustTarget < motThrMin) return; // skip attitude control
+	if (!armed || attitudeTarget.invalid() || thrustTarget < motThrMin) return; // 跳过姿态控制
 
 	const Vector up(0, 0, 1);
 	Vector upActual = Quaternion::rotateVector(up, attitude);
@@ -198,26 +198,26 @@ void controlAttitude() {
 
 
 void controlRates() {
-	if (!armed || ratesTarget.invalid() || thrustTarget < motThrMin) return; // skip rates control
+	if (!armed || ratesTarget.invalid() || thrustTarget < motThrMin) return; // 跳过率控制
 
 	Vector error = ratesTarget - rates;
 
-	// Calculate desired torque, where 0 - no torque, 1 - maximum possible torque
+	// 计算目标扭矩，其中 0 - 无扭矩，1 - 最大可达扭矩
 	torqueTarget.x = rollRatePID.update(error.x);
 	torqueTarget.y = pitchRatePID.update(error.y);
 	torqueTarget.z = yawRatePID.update(error.z);
 }
 
 void controlTorque() {
-	if (!torqueTarget.valid()) return; // skip torque control
+	if (!torqueTarget.valid()) return; // 跳过扭矩控制
 
 	if (!armed) {
-		memset(motors, 0, sizeof(motors)); // stop motors if disarmed
+		memset(motors, 0, sizeof(motors)); // 解除保险状态时停止电机运转
 		return;
 	}
 
 	if (thrustTarget < motThrMin) {
-		for (int i = 0; i < 4; i++) motors[i] = motThrMin; // idle thrust
+		for (int i = 0; i < 4; i++) motors[i] = motThrMin; // 怠速推力
 		return;
 	}
 

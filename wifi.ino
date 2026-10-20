@@ -19,10 +19,10 @@ WiFiUDP udp;
 
 void setupWiFi() {
 	print("Setup Wi-Fi\n");
-	WiFi.setSleep(false); // disable power save - must be set before softAP/begin
+	WiFi.setSleep(false); // 禁用省电模式 - 必须在开启软AP/启动前设置
 	if (wifiMode == W_AP) {
 		WiFi.softAP(
-			storage.getString("WIFI_AP_SSID", "Drone_WiFi").c_str(),
+			storage.getString("WIFI_AP_SSID", "无人机_Wifi").c_str(),
 			storage.getString("WIFI_AP_PASS", "12345678").c_str()
 		);
 	} else if (wifiMode == W_STA) {

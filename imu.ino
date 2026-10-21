@@ -74,6 +74,7 @@ void calibrateGyroOnce() {
 }
 
 void calibrateAccel() {
+	if (armed) { print("请先上锁（disarm）后再校准\n"); return; }
 	print("校准陀螺仪加速计 Calibrating accelerometer\n");
 	imu.setAccelRange(imu.ACCEL_RANGE_2G); // 最灵敏模式
 

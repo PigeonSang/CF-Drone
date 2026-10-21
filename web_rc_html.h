@@ -141,17 +141,44 @@ body{font-family:'Roboto Mono',Arial,"Microsoft YaHei",sans-serif;background:#3c
 }
 /*======== 网页看板娘 ========*/
 .mascot-wrap{position:fixed;right:0;bottom:0;display:flex;justify-content:flex-end;align-items:flex-end;pointer-events:none;z-index:5}
-.mascot{height:clamp(120px,26vh,280px);width:auto;max-width:42vw;object-fit:contain;opacity:.95;filter:drop-shadow(0 0 10px rgba(0,170,255,.25));animation:mascotFloat 4s ease-in-out infinite}
+.mascot{height:clamp(120px,26vh,280px);width:auto;max-width:42vw;object-fit:contain;pointer-events:auto;cursor:pointer;opacity:.95;filter:drop-shadow(0 0 10px rgba(0,170,255,.25));animation:mascotFloat 4s ease-in-out infinite}
 @keyframes mascotFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
 @media (max-height:520px){.mascot{height:clamp(90px,18vh,160px)}}
 
 /*======== 调试窗看板娘 ========*/
 .console-panel{position:relative;overflow:visible}
 .console-panel>div{position:relative;z-index:1}
-.mascot-debug{display:none;position:absolute;right:18px;top:100%;margin-top:-10px;height:clamp(88px,14vh,130px);width:auto;pointer-events:none;opacity:.97;z-index:2;filter:drop-shadow(0 0 10px rgba(0,170,255,.2))}
+.mascot-debug{display:none;position:absolute;right:18px;top:100%;margin-top:-10px;height:clamp(88px,14vh,130px);width:auto;pointer-events:auto;cursor:pointer;opacity:.97;z-index:2;filter:drop-shadow(0 0 10px rgba(0,170,255,.2))}
 body.console-open .console-panel{margin-bottom:calc(clamp(88px,14vh,130px) - 6px)}
 body.console-open .mascot-debug{display:block}
 body.console-open .mascot-wrap{display:none}
+
+/*======== 配平弹窗 ========*/
+.trim-modal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:40}
+.trim-modal.show{display:flex}
+.trim-box{background:#2b2b2b;border:1px solid #555;border-radius:14px;padding:16px 18px;width:min(92vw,360px);
+  box-shadow:0 10px 30px rgba(0,0,0,.5);color:#fff}
+.trim-title{font-size:15px;font-weight:700;text-align:center;margin-bottom:12px}
+.trim-row{display:flex;align-items:center;gap:6px;margin:8px 0;font-size:12px}
+.trim-row>span{flex:1}
+.trim-row input{width:78px;background:#1b1b1b;border:1px solid #555;border-radius:6px;color:#0f8;
+  padding:4px 6px;font-size:12px;text-align:center}
+.trim-row button{width:26px;height:26px;border-radius:6px;border:none;background:#3a3a3a;color:#fff;font-size:14px;cursor:pointer}
+.trim-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
+.trim-actions button{padding:6px 14px;border-radius:8px;border:none;font-size:12px;cursor:pointer}
+#trim-cancel{background:#444;color:#ddd}
+#trim-apply{background:#1a73e8;color:#fff}
+
+/*======== 看板娘对话框 ========*/
+.mascot-bubble{position:absolute;right:100%;bottom:45%;margin-right:10px;z-index:1;background:#fff;color:#222;
+  padding:6px 10px;border-radius:11px;box-shadow:0 5px 14px rgba(0,0,0,.3);font-size:12px;font-weight:700;
+  letter-spacing:.3px;white-space:nowrap;opacity:0;transform:translateX(6px);
+  transition:opacity .18s ease,transform .18s ease;pointer-events:none}
+.mascot-bubble.show{opacity:1;transform:translateX(0)}
+.mascot-bubble::after{content:'';position:absolute;right:-7px;bottom:10px;
+  border-top:6px solid transparent;border-bottom:6px solid transparent;border-left:8px solid #fff}
+.mascot-bubble.in-console{right:10px;bottom:10px;margin-right:0}
+.mascot-bubble.in-console::after{right:-7px;bottom:10px}
 
 /*======== 业余模式单轴摇杆 ========*/
 body.amateur #joystick-left{width:110px;height:var(--js-size);border-radius:55px}
@@ -265,18 +292,111 @@ const CONSOLE_PAGE_LIMIT = 20;
 /*======================== 按钮配置（2×3 六宫格）========================*/
 const buttonConfigs = [
   {icon:"🔒",label:"点击解锁", color:"#ff3333",desc:"解锁/上锁（文字为下一步动作）",compact:true},
-  {icon:"",   label:"2",     color:"#9aa7b0",desc:"预留按钮 2",compact:true},
+  {icon:"🎯",label:"自动校正", color:"#00cfff",desc:"六面加速度校准（同 ca 指令）",compact:true},
   {icon:"🛑",label:"急停",   color:"#ff0055",desc:"紧急停止",compact:true},
   {icon:"🔧",label:"马达自测", color:"#ffaa00",desc:"四个马达依次转动，每个 0.5 秒",compact:true},
   {icon:"🎮",label:"专业模式", color:"#9aa7b0",desc:"切换业余模式（单摇杆）",compact:true},
-  {icon:"",   label:"3",     color:"#9aa7b0",desc:"预留按钮 3",compact:true},
+  {icon:"⚖",label:"配平",   color:"#00cfff",desc:"在线调整横滚/俯仰配平",compact:true},
   {icon:"🔄",label:"切换模式", color:"#00cfff",desc:"自稳→特技→定高 循环切换"},
   {icon:"🖥",label:"调试",   color:"#4a9eff",desc:"调试控制台"}
 ];
 
+/*======================== 配平弹窗 ========================*/
+function openTrimDialog() {
+  let m = document.getElementById('trim-modal');
+  if (!m) {
+    m = document.createElement('div');
+    m.id = 'trim-modal';
+    m.className = 'trim-modal';
+    m.innerHTML = `
+      <div class="trim-box">
+        <div class="trim-title">姿态配平</div>
+        <div class="trim-row"><span>横滚 CTL_TRIM_ROLL</span>
+          <button data-trim="roll" data-d="-1">−</button>
+          <input id="trim-roll" type="number" step="0.001" inputmode="decimal">
+          <button data-trim="roll" data-d="1">+</button>
+        </div>
+        <div class="trim-row"><span>俯仰 CTL_TRIM_PITCH</span>
+          <button data-trim="pitch" data-d="-1">−</button>
+          <input id="trim-pitch" type="number" step="0.001" inputmode="decimal">
+          <button data-trim="pitch" data-d="1">+</button>
+        </div>
+        <div class="trim-actions">
+          <button id="trim-cancel">取消</button>
+          <button id="trim-apply">确定</button>
+        </div>
+      </div>`;
+    document.body.appendChild(m);
+    m.addEventListener('click', e => { if (e.target === m) closeTrimDialog(); });
+    m.querySelectorAll('button[data-trim]').forEach(b => {
+      b.addEventListener('click', () => {
+        const inp = document.getElementById(b.dataset.trim === 'roll' ? 'trim-roll' : 'trim-pitch');
+        let v = parseFloat(inp.value) || 0;
+        v += (b.dataset.d === '1' ? 1 : -1) * 0.001;
+        inp.value = v.toFixed(4);
+      });
+    });
+    document.getElementById('trim-cancel').addEventListener('click', closeTrimDialog);
+    document.getElementById('trim-apply').addEventListener('click', applyTrim);
+  }
+  fetch('/trim').then(r => r.json()).then(d => {
+    document.getElementById('trim-roll').value  = Number(d.roll  || 0).toFixed(4);
+    document.getElementById('trim-pitch').value = Number(d.pitch || 0).toFixed(4);
+    m.classList.add('show');
+  }).catch(() => {
+    document.getElementById('trim-roll').value  = '0.0000';
+    document.getElementById('trim-pitch').value = '0.0000';
+    m.classList.add('show');
+  });
+}
+
+function closeTrimDialog() {
+  const m = document.getElementById('trim-modal');
+  if (m) m.classList.remove('show');
+}
+
+function applyTrim() {
+  const roll  = parseFloat(document.getElementById('trim-roll').value)  || 0;
+  const pitch = parseFloat(document.getElementById('trim-pitch').value) || 0;
+  fetch('/trim', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({roll, pitch}) })
+    .then(r => r.json())
+    .then(d => {
+      if (d.ok) { showToast('✅ 配平已应用'); closeTrimDialog(); }
+      else showToast('❌ 配平写入失败');
+    })
+    .catch(() => showToast('❌ 发送失败'));
+}
+
+/*======================== 看板娘点击对话 ========================*/
+function initMascotClick() {
+  document.querySelectorAll('.mascot, .mascot-debug').forEach(el => {
+    el.addEventListener('click', e => {
+      e.stopPropagation();
+      showMascotBubble(el);
+    });
+  });
+}
+
+function showMascotBubble(el) {
+  let b = document.getElementById('mascot-bubble');
+  if (!b) {
+    b = document.createElement('div');
+    b.id = 'mascot-bubble';
+    b.className = 'mascot-bubble';
+    document.body.appendChild(b);
+  }
+  b.textContent = 'Ciallo～(∠・ω< )⌒★';
+  if (b.parentElement !== el.parentElement) el.parentElement.appendChild(b);
+  b.classList.toggle('in-console', el.parentElement && el.parentElement.id === 'console-panel');
+  b.classList.add('show');
+  clearTimeout(b._timer);
+  b._timer = setTimeout(() => b.classList.remove('show'), 2000);
+}
+
 /*======================== 初始化 ========================*/
 function init() {
   initButtons();
+  initMascotClick();
   initNetwork();
   initPointerEvents();
   requestAnimationFrame(animationLoop);
@@ -625,7 +745,7 @@ function handleButton(idx) {
     return;
   }
   if (idx === 5) {
-    showToast('按钮 3 未绑定');
+    openTrimDialog();
     return;
   }
   if (idx === 6) {
@@ -649,9 +769,15 @@ function handleButton(idx) {
     if (navigator.vibrate) navigator.vibrate(30);
     return;
   }
-  // 原上锁按钮位置：预留，暂未绑定
+  // 自动校正：与 CLI 的 ca 指令等价（六面加速度校准）
   if (idx === 1) {
-    showToast('按钮 2 未绑定');
+    if (isArmed) { showToast('请先上锁再校准'); return; }
+    if (!confirm('确认已拆桨并放在水平面上？\n将进入六面校准，约 1 分钟，请按控制台提示摆放姿态')) return;
+    if (!consolePanelOpen) toggleConsole();
+    fetch('/console/cmd', { method:'POST', body:'ca' })
+      .then(r => r.json())
+      .then(() => showToast('🎯 校准已开始，请按控制台提示操作'))
+      .catch(() => showToast('❌ 指令发送失败'));
     return;
   }
   // 急停

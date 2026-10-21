@@ -13,6 +13,7 @@
 extern float t;
 extern float controlTime;
 extern float controlRoll, controlPitch, controlYaw, controlThrottle, controlMode;
+extern float trimRoll, trimPitch; // control.ino
 
 // ==================== 配置常量 ====================
 #define WEB_RC_TIMEOUT_MS    10000          // 连接超时：最后一次收包超过此时间(ms)视为断连；需大于心跳间隔
@@ -383,6 +384,26 @@ void setupWebRC() {
     webRCServer.on("/char2.webp", HTTP_GET, []() {
         webRCServer.sendHeader("Cache-Control", "max-age=86400");
         webRCServer.send_P(200, "image/webp", (PGM_P)webRCChar2Webp, webRCChar2WebpLen);
+    });
+
+    // 姿态配平读写（等价于 p CTL_TRIM_ROLL / p CTL_TRIM_PITCH）
+    webRCServer.on("/trim", HTTP_GET, []() {
+        char json[96];
+        snprintf(json, sizeof(json), "{\"roll\":%.4f,\"pitch\":%.4f}", trimRoll, trimPitch);
+        webRCServer.send(200, "application/json", json);
+    });
+
+    webRCServer.on("/trim", HTTP_POST, []() {
+        String body = webRCServer.arg("plain");
+        const char* r = findJsonValue(body.c_str(), "\"roll\"");
+        const char* p = findJsonValue(body.c_str(), "\"pitch\"");
+        if (!r || !p) { webRCServer.send(400, "application/json", "{\"ok\":0}"); return; }
+        bool ok1 = setParameter("CTL_TRIM_ROLL", atof(r));
+        bool ok2 = setParameter("CTL_TRIM_PITCH", atof(p));
+        char json[96];
+        snprintf(json, sizeof(json), "{\"ok\":%d,\"roll\":%.4f,\"pitch\":%.4f}",
+                 (ok1 && ok2) ? 1 : 0, trimRoll, trimPitch);
+        webRCServer.send(200, "application/json", json);
     });
 
     // 马达自测：四路依次转动，每路 2 秒（无视上锁状态，仅限台架使用）

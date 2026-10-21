@@ -145,6 +145,21 @@ body{font-family:'Roboto Mono',Arial,"Microsoft YaHei",sans-serif;background:#3c
 @keyframes mascotFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
 @media (max-height:520px){.mascot{height:clamp(90px,18vh,160px)}}
 
+/*======== 调试窗看板娘 ========*/
+.console-panel{position:relative;overflow:visible}
+.console-panel>div{position:relative;z-index:1}
+.mascot-debug{display:none;position:absolute;right:18px;top:100%;margin-top:-10px;height:clamp(88px,14vh,130px);width:auto;pointer-events:none;opacity:.97;z-index:2;filter:drop-shadow(0 0 10px rgba(0,170,255,.2))}
+body.console-open .console-panel{margin-bottom:calc(clamp(88px,14vh,130px) - 6px)}
+body.console-open .mascot-debug{display:block}
+body.console-open .mascot-wrap{display:none}
+
+/*======== 业余模式单轴摇杆 ========*/
+body.amateur #joystick-left{width:110px;height:var(--js-size);border-radius:55px}
+body.amateur #joystick-right{width:var(--js-size);height:110px;border-radius:55px}
+body.amateur .joystick-knob{width:calc(var(--js-size)*0.18);height:calc(var(--js-size)*0.18)}
+body.amateur #joystick-left::after{display:none}
+body.amateur #joystick-right::before{display:none}
+
 /*======== 版权页脚 ========*/
 .footer{text-align:center;font-size:0.5rem;color:rgba(255,255,255,.25);padding:0;flex-shrink:0;line-height:0.8;}
 .footer a{color:rgba(255,255,255,.3);text-decoration:none}
@@ -195,6 +210,7 @@ body{font-family:'Roboto Mono',Arial,"Microsoft YaHei",sans-serif;background:#3c
 
   <!-- 调试控制台面板（默认隐藏，点击调试按钮打开） -->
   <div id="console-panel" class="console-panel" style="display:none">
+    <img class="mascot-debug" src="/char2.webp" alt="">
     <div id="console-output" class="console-output"></div>
     <div style="display:flex;gap:6px;touch-action:auto">
       <input id="console-input" placeholder="输入命令 (ps/imu/rc/arm/disarm/help)..."
@@ -225,6 +241,7 @@ let rightStick = {x:0, y:0, rawX:0, rawY:0};
 let lastSentValues = { throttle:0, roll:0, pitch:0, yaw:0 };
 let lastForceSentTime = 0; // 上次强制重发的时间戳（performance.now()）
 let currentValues  = { throttle:0, roll:0, pitch:0, yaw:0 };
+let amateurMode = false;   // false=专业模式（双摇杆），true=业余模式（油门+偏航）
 const MIN_CHANGE_THRESHOLD = 0.5;
 
 // 固定参数常量（替代前端参数调节面板，与后端 CONFIG_ 对应）
@@ -250,7 +267,7 @@ const buttonConfigs = [
   {icon:"🔒",label:"上锁",   color:"#ff3333",desc:"锁定电机",compact:true},
   {icon:"🛑",label:"急停",   color:"#ff0055",desc:"紧急停止",compact:true},
   {icon:"🔧",label:"马达自测", color:"#ffaa00",desc:"四个马达依次转动，每个 0.5 秒",compact:true},
-  {icon:"",   label:"2",     color:"#9aa7b0",desc:"预留按钮 2",compact:true},
+  {icon:"🎮",label:"专业模式", color:"#9aa7b0",desc:"切换业余模式（单摇杆）",compact:true},
   {icon:"",   label:"3",     color:"#9aa7b0",desc:"预留按钮 3",compact:true},
   {icon:"🔄",label:"切换模式", color:"#00cfff",desc:"自稳→特技→定高 循环切换"},
   {icon:"🖥",label:"调试",   color:"#4a9eff",desc:"调试控制台"}
@@ -337,10 +354,18 @@ function processJoystickInput() {
   // 发送原始值，后端统一完成映射（对齐SBUS/MAVLink模式，避免双重映射）
   // 油门：rawY∈[-100,+100]，后端 processThrottle: (raw+100)/(2*RAW_MAX)*100 → 0~100%
   // 姿态轴：归一化到[-1,1]做指数曲线后还原×100，后端除以RAW_MAX得[-1,1]
+  if (amateurMode) {
+    // 业余模式：左杆仅油门，右杆仅偏航，横滚/俯仰固定为 0
+    currentValues.throttle = leftStick.rawY;
+    currentValues.yaw      = applyCurve(rightStick.rawX / 100) * 100;
+    currentValues.pitch    = 0;
+    currentValues.roll     = 0;
+  } else {
   currentValues.throttle = leftStick.rawY;
   currentValues.yaw   = applyCurve(leftStick.rawX  / 100) * 100;  // 右推=顺时针，与MAVLink一致
   currentValues.pitch = applyCurve(rightStick.rawY / 100) * 100;  // 上推=前进，与MAVLink一致
   currentValues.roll  = applyCurve(rightStick.rawX / 100) * 100;  // 右推=右滚，与MAVLink一致
+  }
   leftStick.x  = currentValues.yaw;
   leftStick.y  = leftStick.rawY;
   rightStick.x = currentValues.roll;
@@ -384,9 +409,13 @@ function sendButtonData(buttonIndex, state) {
 /*======================== 显示更新 ========================*/
 function updateDisplayAll() {
   document.getElementById('left-y').textContent  = Math.round((currentValues.throttle + 100) / 2);
-  document.getElementById('left-x').textContent  = Math.round(leftStick.x);
-  document.getElementById('right-x').textContent = Math.round(rightStick.x);
-  document.getElementById('right-y').textContent = Math.round(rightStick.y);
+  if (amateurMode) {
+    document.getElementById('right-x').textContent = Math.round(currentValues.yaw);
+  } else {
+    document.getElementById('left-x').textContent  = Math.round(leftStick.x);
+    document.getElementById('right-x').textContent = Math.round(rightStick.x);
+    document.getElementById('right-y').textContent = Math.round(rightStick.y);
+  }
 }
 
 /*======================== Pointer Events 处理 ========================*/
@@ -408,7 +437,7 @@ function handlePointerEnd(e, side) {
   joystick.classList.remove('active');
   // 计算归位目标：左摇杆Y轴非ALTHOLD时归底，其他归中
   const targetRawY = (side === 'left' && currentFlightMode !== 3) ? -100 : 0;
-  const radius = joystick.getBoundingClientRect().width / 2 - 10;
+  const radius = stickRadius(side, joystick.getBoundingClientRect());
   const targetDy = -targetRawY / 100 * radius;
   knob.style.transition = 'transform 0.2s ease-out';
   knob.style.transform  = `translate(calc(-50% + 0px), calc(-50% + ${targetDy}px))`;
@@ -424,14 +453,15 @@ function updateJoystickPosition(side, clientX, clientY) {
   const knob     = document.getElementById(`knob-${side}`);
   const rect     = joystick.getBoundingClientRect();
   const cx = rect.width / 2, cy = rect.height / 2;
-  const radius = cx - 10;
+  const radius = stickRadius(side, rect);
   let dx = (clientX - rect.left) - cx;
   let dy = (clientY - rect.top)  - cy;
+  if (amateurMode) { if (side === 'left') dx = 0; else dy = 0; }
   const dist = Math.sqrt(dx*dx + dy*dy);
   if (dist > radius) { dx = dx/dist*radius; dy = dy/dist*radius; }
   knob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
-  if (side === 'left')  { leftStick.rawX  =  dx/radius*100; leftStick.rawY  = -dy/radius*100; }
-  else                  { rightStick.rawX =  dx/radius*100; rightStick.rawY = -dy/radius*100; }
+  if (side === 'left')  { leftStick.rawX  = amateurMode ? 0 : dx/radius*100; leftStick.rawY  = -dy/radius*100; }
+  else                  { rightStick.rawX = dx/radius*100; rightStick.rawY = amateurMode ? 0 : -dy/radius*100; }
 }
 
 /*======================== 网络处理 ========================*/
@@ -514,7 +544,7 @@ function resetLeftStick(targetRawY) {
   const joystick = document.getElementById('joystick-left');
   const rect     = joystick.getBoundingClientRect();
   if (rect.width === 0) return;
-  const radius = rect.width / 2 - 10;
+  const radius = stickRadius('left', rect);
   const dy = -targetRawY / 100 * radius;
   knob.style.transition = 'transform 0.3s ease-out';
   knob.style.transform  = `translate(calc(-50% + 0px), calc(-50% + ${dy}px))`;
@@ -523,6 +553,53 @@ function resetLeftStick(targetRawY) {
   processJoystickInput();
   sendJoystickData();
 }
+/*======================== 专业/业余模式 ========================*/
+function stickRadius(side, rect) {
+  if (!amateurMode) return rect.width / 2 - 10;
+  const knob = document.getElementById('knob-' + side);
+  const kr = knob ? knob.getBoundingClientRect().width / 2 : 20;
+  return (side === 'left' ? rect.height / 2 : rect.width / 2) - kr - 6;
+}
+
+function resetRightStick() {
+  const knob = document.getElementById('knob-right');
+  if (!knob) return;
+  knob.style.transition = 'transform 0.2s ease-out';
+  knob.style.transform  = 'translate(-50%, -50%)';
+  setTimeout(() => { knob.style.transition = ''; }, 200);
+}
+
+function setAmateurMode(on) {
+  amateurMode = !!on;
+  document.body.classList.toggle('amateur', amateurMode);
+
+  const btn = document.getElementById('btn-4');
+  if (btn) {
+    btn.innerHTML = `<div class="button-icon">${amateurMode ? '🎓' : '🎮'}</div><div>${amateurMode ? '业余模式' : '专业模式'}</div>`;
+  }
+  const leftXItem  = document.getElementById('left-x').parentElement;
+  const rightYItem = document.getElementById('right-y').parentElement;
+  leftXItem.style.display  = amateurMode ? 'none' : '';
+  rightYItem.style.display = amateurMode ? 'none' : '';
+  document.getElementById('right-x').previousElementSibling.textContent = amateurMode ? '偏航:' : '横滚:';
+
+  const titles = document.querySelectorAll('.joystick-title');
+  if (titles.length >= 2) {
+    titles[0].textContent = amateurMode ? '左摇杆 (油门)' : '左摇杆 (油门/偏航)';
+    titles[1].textContent = amateurMode ? '右摇杆 (偏航)' : '右摇杆 (俯仰/横滚)';
+  }
+
+  // 定高模式（ALTHOLD）下油门杆表示爬升/下降速率，切换模式时保持当前杆量不变
+  const throttleY = (currentFlightMode === 3) ? leftStick.rawY : -100;
+  leftStick  = {x:0, y:0, rawX:0, rawY:throttleY};
+  rightStick = {x:0, y:0, rawX:0, rawY:0};
+  // 等布局应用新尺寸后再归位，否则半径按旧尺寸计算
+  requestAnimationFrame(() => { resetLeftStick(throttleY); resetRightStick(); });
+  processJoystickInput();
+  sendJoystickData();
+  showToast(amateurMode ? '🎓 业余模式：左油门 / 右偏航' : '🎮 专业模式：双摇杆');
+}
+
 /*======================== 按钮处理 ========================*/
 function handleButton(idx) {
   if (idx === 7) { toggleConsole(); return; }
@@ -534,8 +611,12 @@ function handleButton(idx) {
       .catch(() => showToast('❌ 指令发送失败'));
     return;
   }
-  if (idx === 4 || idx === 5) {
-    showToast('按钮 ' + (idx - 2) + ' 未绑定');
+  if (idx === 4) {
+    setAmateurMode(!amateurMode);
+    return;
+  }
+  if (idx === 5) {
+    showToast('按钮 3 未绑定');
     return;
   }
   if (idx === 6) {
@@ -583,6 +664,7 @@ function toggleConsole() {
   const open  = panel.style.display === 'none';
   consolePanelOpen = open;
   panel.style.display = open ? 'flex' : 'none';
+  document.body.classList.toggle('console-open', open);
   if (open) { panel.style.flexDirection = 'column'; }
   if (btn) { open ? btn.classList.add('active') : btn.classList.remove('active'); }
   if (open) {

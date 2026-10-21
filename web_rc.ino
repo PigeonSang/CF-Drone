@@ -6,6 +6,7 @@
 #include <WiFi.h>
 #include "web_rc_html.h"
 #include "web_rc_char.h"
+#include "web_rc_char2.h"
 #include "board_config.h"
 
 // 飞控统一控制变量（供协议适配层写入，与 SBUS/MAVLink 共用）
@@ -376,6 +377,12 @@ void setupWebRC() {
     webRCServer.on("/char.webp", HTTP_GET, []() {
         webRCServer.sendHeader("Cache-Control", "max-age=86400");
         webRCServer.send_P(200, "image/webp", (PGM_P)webRCCharWebp, webRCCharWebpLen);
+    });
+
+    // 调试窗看板娘（打开控制台时显示，关闭时隐藏）
+    webRCServer.on("/char2.webp", HTTP_GET, []() {
+        webRCServer.sendHeader("Cache-Control", "max-age=86400");
+        webRCServer.send_P(200, "image/webp", (PGM_P)webRCChar2Webp, webRCChar2WebpLen);
     });
 
     // 马达自测：四路依次转动，每路 2 秒（无视上锁状态，仅限台架使用）

@@ -182,10 +182,8 @@ body.console-open .mascot-wrap{display:none}
 
 /*======== 业余模式单轴摇杆 ========*/
 body.amateur #joystick-left{width:110px;height:var(--js-size);border-radius:55px}
-body.amateur #joystick-right{width:var(--js-size);height:110px;border-radius:55px}
-body.amateur .joystick-knob{width:calc(var(--js-size)*0.18);height:calc(var(--js-size)*0.18)}
+body.amateur #joystick-left .joystick-knob{width:calc(var(--js-size)*0.18);height:calc(var(--js-size)*0.18)}
 body.amateur #joystick-left::after{display:none}
-body.amateur #joystick-right::before{display:none}
 
 /*======== 版权页脚 ========*/
 .footer{text-align:center;font-size:0.5rem;color:rgba(255,255,255,.25);padding:0;flex-shrink:0;line-height:0.8;}
@@ -271,6 +269,7 @@ let currentValues  = { throttle:0, roll:0, pitch:0, yaw:0 };
 let amateurMode = false;   // false=专业模式（双摇杆），true=业余模式（油门+偏航）
 let isArmed = false;       // 当前解锁状态（由飞控响应同步）
 const MIN_CHANGE_THRESHOLD = 0.5;
+const AMATEUR_PITCH_SCALE = 10 / 25.5;  // 业余模式俯仰限幅：满杆约 10°
 
 // 固定参数常量（替代前端参数调节面板，与后端 CONFIG_ 对应）
 const DEADZONE = 3;   // 死区（已移至后端 stickDeadzone 统一处理，前端不再使用）
@@ -479,7 +478,7 @@ function processJoystickInput() {
     // 业余模式：左杆仅油门，右杆仅偏航，横滚/俯仰固定为 0
     currentValues.throttle = leftStick.rawY;
     currentValues.yaw      = applyCurve(rightStick.rawX / 100) * 100;
-    currentValues.pitch    = 0;
+    currentValues.pitch    = applyCurve(rightStick.rawY / 100) * 100 * AMATEUR_PITCH_SCALE;
     currentValues.roll     = 0;
   } else {
   currentValues.throttle = leftStick.rawY;
@@ -532,6 +531,7 @@ function updateDisplayAll() {
   document.getElementById('left-y').textContent  = Math.round((currentValues.throttle + 100) / 2);
   if (amateurMode) {
     document.getElementById('right-x').textContent = Math.round(currentValues.yaw);
+    document.getElementById('right-y').textContent = Math.round(currentValues.pitch);
   } else {
     document.getElementById('left-x').textContent  = Math.round(leftStick.x);
     document.getElementById('right-x').textContent = Math.round(rightStick.x);
@@ -577,12 +577,12 @@ function updateJoystickPosition(side, clientX, clientY) {
   const radius = stickRadius(side, rect);
   let dx = (clientX - rect.left) - cx;
   let dy = (clientY - rect.top)  - cy;
-  if (amateurMode) { if (side === 'left') dx = 0; else dy = 0; }
+  if (amateurMode && side === 'left') dx = 0;
   const dist = Math.sqrt(dx*dx + dy*dy);
   if (dist > radius) { dx = dx/dist*radius; dy = dy/dist*radius; }
   knob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
   if (side === 'left')  { leftStick.rawX  = amateurMode ? 0 : dx/radius*100; leftStick.rawY  = -dy/radius*100; }
-  else                  { rightStick.rawX = dx/radius*100; rightStick.rawY = amateurMode ? 0 : -dy/radius*100; }
+  else                  { rightStick.rawX = dx/radius*100; rightStick.rawY = -dy/radius*100; }
 }
 
 /*======================== 网络处理 ========================*/
@@ -709,13 +709,13 @@ function setAmateurMode(on) {
   const leftXItem  = document.getElementById('left-x').parentElement;
   const rightYItem = document.getElementById('right-y').parentElement;
   leftXItem.style.display  = amateurMode ? 'none' : '';
-  rightYItem.style.display = amateurMode ? 'none' : '';
+  rightYItem.style.display = '';
   document.getElementById('right-x').previousElementSibling.textContent = amateurMode ? '偏航:' : '横滚:';
 
   const titles = document.querySelectorAll('.joystick-title');
   if (titles.length >= 2) {
     titles[0].textContent = amateurMode ? '左摇杆 (油门)' : '左摇杆 (油门/偏航)';
-    titles[1].textContent = amateurMode ? '右摇杆 (偏航)' : '右摇杆 (俯仰/横滚)';
+    titles[1].textContent = amateurMode ? '右摇杆 (偏航/俯仰)' : '右摇杆 (俯仰/横滚)';
   }
 
   // 定高模式（ALTHOLD）下油门杆表示爬升/下降速率，切换模式时保持当前杆量不变

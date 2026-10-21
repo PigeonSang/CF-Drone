@@ -170,7 +170,7 @@ body.amateur #joystick-right::before{display:none}
 <div class="container">
   <!-- 顶部状态栏 -->
   <div class="header">
-    <h1>琛光无人机网页遥控器</h1>
+    <h1>琛光无人机遥控器--Ciallo～(∠・ω&lt; )⌒★版</h1>
     <div class="status-bar">
       <div class="status-item"><span class="status-dot" id="status-dot"></span><span id="connection-text">连接中...</span></div>
       <div class="status-item" id="armed-status-item" style="background:rgba(255,51,51,0.15)"><span id="armed-status" style="color:#ff6666">已上锁</span></div>

@@ -56,6 +56,7 @@
 #define BOARD_PMW_CS_PIN       (-1)        // PMW3901 CS，C3 暂未分配，设为 -1 禁用
 
 #elif defined(CONFIG_IDF_TARGET_ESP32S3)
+
 // ---------------------- ESP32S3 -------------------------
 
 // ---- 电机引脚：GPIO4-7，远离 FSPI 区（GPIO10-13），无 Strapping 约束 ----

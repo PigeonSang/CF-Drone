@@ -24,6 +24,13 @@ public:
 
 		if (dt > 0 && dt < dtMax) {
 			integral += error * dt;
+			// 积分状态本身限幅：只限幅 I 的输出会让积分越积越大，退饱和需要数秒
+			if (i > 0) {
+				float limit = (windup > 0) ? (windup / i) : 0.0f;
+				integral = constrain(integral, -limit, limit);
+			} else {
+				integral = 0;
+			}
 			derivative = lpf.update((error - prevError) / dt); // 计算导数并应用低通滤波器
 		} else {
 			integral = 0;

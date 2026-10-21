@@ -95,12 +95,28 @@ extern float motors[4];
 extern float controlRoll, controlPitch, controlThrottle, controlYaw, controlMode;
 extern float batteryVoltage;  // battery.ino
 
+// 清零六个控制环的积分与微分状态
+void resetControlPIDs() {
+	rollRatePID.reset();
+	pitchRatePID.reset();
+	yawRatePID.reset();
+	rollPID.reset();
+	pitchPID.reset();
+	yawPID.reset();
+}
+
 void control() {
 	interpretControls();
 #if WEB_RC_ENABLED
 	interpretWebRC();
 #endif
 	failsafe();
+
+	// 解锁状态变化时清零积分；低油门/未解锁时持续清零，避免地面推油门时积分提前积满
+	static bool wasArmed = false;
+	if (armed != wasArmed) { resetControlPIDs(); wasArmed = armed; }
+	if (!armed || thrustTarget < motThrMin) resetControlPIDs();
+
 	controlAttitude();
 	controlRates();
 	controlTorque();

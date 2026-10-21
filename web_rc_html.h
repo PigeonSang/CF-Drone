@@ -137,6 +137,12 @@ body{font-family:'Roboto Mono',Arial,"Microsoft YaHei",sans-serif;background:#3c
   .button{font-size:0.68rem;padding:5px 3px}
   .button-icon{font-size:0.88rem;margin-bottom:2px}
 }
+/*======== 网页看板娘 ========*/
+.mascot-wrap{display:flex;justify-content:center;align-items:flex-end;flex-shrink:0;min-height:0;pointer-events:none}
+.mascot{max-height:clamp(80px,20vh,220px);max-width:50%;object-fit:contain;opacity:.95;filter:drop-shadow(0 0 10px rgba(0,170,255,.25));animation:mascotFloat 4s ease-in-out infinite}
+@keyframes mascotFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+@media (max-height:520px){.mascot-wrap{display:none}}
+
 /*======== 版权页脚 ========*/
 .footer{text-align:center;font-size:0.5rem;color:rgba(255,255,255,.25);padding:0;flex-shrink:0;line-height:0.8;}
 .footer a{color:rgba(255,255,255,.3);text-decoration:none}
@@ -194,6 +200,8 @@ body{font-family:'Roboto Mono',Arial,"Microsoft YaHei",sans-serif;background:#3c
       <button onclick="sendConsoleCmd()" style="background:#1a73e8;border:none;border-radius:6px;color:#fff;padding:4px 10px;font-size:0.7rem;cursor:pointer;touch-action:auto">发送</button>
     </div>
   </div>
+  <!-- 看板娘 -->
+  <div class="mascot-wrap"><img class="mascot" src="/char.jpg" alt=""></div>
   <!-- 版权页脚 -->
   <div class="footer"><a href="https://oshwhub.com/songge8/project_qqqyfdkm" target="_blank">琛光无人机开源项目</a></div>
 </div>

@@ -5,6 +5,7 @@
 #include <WebServer.h>
 #include <WiFi.h>
 #include "web_rc_html.h"
+#include "web_rc_char.h"
 #include "board_config.h"
 
 // 飞控统一控制变量（供协议适配层写入，与 SBUS/MAVLink 共用）
@@ -369,6 +370,12 @@ void setupWebRC() {
 
     webRCServer.on("/", HTTP_GET, []() {
         webRCServer.send(200, "text/html", webRCIndexHtml);
+    });
+
+    // 看板娘图片：直接从 PROGMEM 流式发送，不占堆内存
+    webRCServer.on("/char.jpg", HTTP_GET, []() {
+        webRCServer.sendHeader("Cache-Control", "max-age=86400");
+        webRCServer.send_P(200, "image/jpeg", (PGM_P)webRCCharJpg, webRCCharJpgLen);
     });
     webRCServer.on("/web_rc",           HTTP_POST, handleWebRCRequest);
     webRCServer.on("/web_rc/heartbeat", HTTP_POST, handleWebRCRequest);

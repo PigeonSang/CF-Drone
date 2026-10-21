@@ -22,7 +22,7 @@ void setupWiFi() {
 	WiFi.setSleep(false); // 禁用省电模式 - 必须在开启软AP/启动前设置
 	if (wifiMode == W_AP) {
 		WiFi.softAP(
-			storage.getString("WIFI_AP_SSID", "无人机_Wifi").c_str(),
+			storage.getString("WIFI_AP_SSID", "Ciallo～(∠・ω< )⌒★").c_str(),
 			storage.getString("WIFI_AP_PASS", "12345678").c_str()
 		);
 	} else if (wifiMode == W_STA) {

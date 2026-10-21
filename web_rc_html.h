@@ -8,7 +8,7 @@ const char webRCIndexHtml[] PROGMEM = R"rawliteral(
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
-<title>琛光无人机遥控器</title>
+<title>琛光无人机遥控器--Ciallo～(∠・ω< )⌒★版</title>
 <style>
 /*======== 响应式变量 ========*/
 :root{
@@ -242,6 +242,7 @@ let lastSentValues = { throttle:0, roll:0, pitch:0, yaw:0 };
 let lastForceSentTime = 0; // 上次强制重发的时间戳（performance.now()）
 let currentValues  = { throttle:0, roll:0, pitch:0, yaw:0 };
 let amateurMode = false;   // false=专业模式（双摇杆），true=业余模式（油门+偏航）
+let isArmed = false;       // 当前解锁状态（由飞控响应同步）
 const MIN_CHANGE_THRESHOLD = 0.5;
 
 // 固定参数常量（替代前端参数调节面板，与后端 CONFIG_ 对应）
@@ -263,8 +264,8 @@ const CONSOLE_PAGE_LIMIT = 20;
 
 /*======================== 按钮配置（2×3 六宫格）========================*/
 const buttonConfigs = [
-  {icon:"🔓",label:"解锁",   color:"#00ff88",desc:"解锁电机",compact:true},
-  {icon:"🔒",label:"上锁",   color:"#ff3333",desc:"锁定电机",compact:true},
+  {icon:"🔒",label:"点击解锁", color:"#ff3333",desc:"解锁/上锁（文字为下一步动作）",compact:true},
+  {icon:"",   label:"2",     color:"#9aa7b0",desc:"预留按钮 2",compact:true},
   {icon:"🛑",label:"急停",   color:"#ff0055",desc:"紧急停止",compact:true},
   {icon:"🔧",label:"马达自测", color:"#ffaa00",desc:"四个马达依次转动，每个 0.5 秒",compact:true},
   {icon:"🎮",label:"专业模式", color:"#9aa7b0",desc:"切换业余模式（单摇杆）",compact:true},
@@ -492,6 +493,14 @@ function sendToESP(url, data) {
         el.textContent = resp.arm ? '已解锁' : '已上锁';
         item.style.background = resp.arm ? 'rgba(0,255,136,0.15)' : 'rgba(255,51,51,0.15)';
         el.style.color = resp.arm ? '#00ff88' : '#ff6666';
+
+        // 合并按钮显示“当前状态”：上锁=🔒红，解锁=🔓绿
+        isArmed = !!resp.arm;
+        const b0 = document.getElementById('btn-0');
+        if (b0) {
+          b0.innerHTML = `<div class="button-icon">${isArmed ? '🔓' : '🔒'}</div><div>${isArmed ? '点击上锁' : '点击解锁'}</div>`;
+          b0.style.border = `2px solid ${isArmed ? '#00ff88' : '#ff3333'}55`;
+        }
       }
 
       // 按钮松开确认 toast（rt=2, bs=0）
@@ -631,14 +640,26 @@ function handleButton(idx) {
     if (navigator.vibrate) navigator.vibrate(30);
     return;
   }
-  // 解锁/上锁/急停：先发按下（state=1），100ms后发松开（state=0）
-  // 后端响应中携带 rt/bi/bs，前端用这些字段判断 toast，无需 lastPressedButton
-  if (idx === 0 || idx === 1 || idx === 2) {
-    if (idx === 0)      showToast('🔓 解锁中...');
-    else if (idx === 1) showToast('🔒 上锁中...');
-    else if (idx === 2) { showToast('🛑 急停指令发送中...'); fetch('/test/stop', { method:'POST' }).catch(()=>{}); }
-    sendButtonData(idx, 1);
-    setTimeout(() => sendButtonData(idx, 0), 100);
+  // 解锁/上锁合并：未解锁时发 bit0（解锁），已解锁时发 bit1（上锁）
+  if (idx === 0) {
+    const bit = isArmed ? 1 : 0;
+    showToast(isArmed ? '🔒 上锁中...' : '🔓 解锁中...');
+    sendButtonData(bit, 1);
+    setTimeout(() => sendButtonData(bit, 0), 100);
+    if (navigator.vibrate) navigator.vibrate(30);
+    return;
+  }
+  // 原上锁按钮位置：预留，暂未绑定
+  if (idx === 1) {
+    showToast('按钮 2 未绑定');
+    return;
+  }
+  // 急停
+  if (idx === 2) {
+    showToast('🛑 急停指令发送中...');
+    fetch('/test/stop', { method:'POST' }).catch(()=>{});
+    sendButtonData(2, 1);
+    setTimeout(() => sendButtonData(2, 0), 100);
     if (navigator.vibrate) navigator.vibrate(30);
   }
 }

@@ -377,6 +377,18 @@ void setupWebRC() {
         webRCServer.sendHeader("Cache-Control", "max-age=86400");
         webRCServer.send_P(200, "image/jpeg", (PGM_P)webRCCharJpg, webRCCharJpgLen);
     });
+
+    // 马达自测：四路依次转动，每路 2 秒（无视上锁状态，仅限台架使用）
+    webRCServer.on("/test/motors", HTTP_POST, []() {
+        startMotorSelfTest();
+        webRCServer.send(200, "application/json", "{\"ok\":1}");
+    });
+
+    // 中止马达自测（急停按钮同时调用）
+    webRCServer.on("/test/stop", HTTP_POST, []() {
+        stopMotorSelfTest();
+        webRCServer.send(200, "application/json", "{\"ok\":1}");
+    });
     webRCServer.on("/web_rc",           HTTP_POST, handleWebRCRequest);
     webRCServer.on("/web_rc/heartbeat", HTTP_POST, handleWebRCRequest);
 

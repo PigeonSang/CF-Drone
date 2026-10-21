@@ -55,6 +55,7 @@ void loop() {
 	estimate(); // 姿态与状态估计（互补滤波融合IMU数据）
 	updateBatteryVoltage(); // 更新电池电压采样与低电压保护判断
 	control(); // 飞控核心：姿态环PID解算，输出电机控制量
+	updateMotorTest(); // 马达自测（仅在自测激活时覆盖电机输出）
 	sendMotors(); // 将电机控制量输出到电机（PWM/DShot）
 	handleInput(); // 处理串口/Web控制台输入命令
 #if WIFI_ENABLED

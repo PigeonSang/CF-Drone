@@ -86,14 +86,16 @@ body{font-family:'Roboto Mono',Arial,"Microsoft YaHei",sans-serif;background:#3c
 
 /*======== 按钮区 ========*/
 .buttons-container{flex:.55;display:flex;flex-direction:column;gap:10px;padding:12px;background:rgba(0,0,0,.4);border-radius:20px;border:2px solid rgba(150,150,150,.3);box-shadow:inset 0 0 20px rgba(0,0,0,.5)}
-.buttons-grid{display:grid;grid-template-columns:repeat(6,1fr);grid-template-rows:repeat(2,1fr);gap:8px;flex:1}
+.buttons-grid{display:grid;grid-template-columns:repeat(6,1fr);grid-template-rows:0.5fr 0.5fr 1fr;gap:6px;flex:1}
 .buttons-grid>button{grid-column:span 2}
-.buttons-grid>button:nth-child(4),.buttons-grid>button:nth-child(5){grid-column:span 3}
+.buttons-grid>button:nth-child(7),.buttons-grid>button:nth-child(8){grid-column:span 3}
 .button{background:linear-gradient(145deg,#484848,#383838);border:none;border-radius:10px;color:#fff;font-size:.85rem;font-weight:bold;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:10px 5px;cursor:pointer;transition:all .15s cubic-bezier(.4,0,.2,1);box-shadow:0 3px 10px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.1);position:relative}
 .button:hover{background:linear-gradient(145deg,#565656,#464646);transform:translateY(-1px)}
 .button.active{background:linear-gradient(145deg,#1a73e8,#0d47a1);box-shadow:0 0 15px rgba(26,115,232,.6),inset 0 1px 0 rgba(255,255,255,.2);transform:scale(.95)}
 .button:active{transform:scale(.92)}
 .button-icon{font-size:1.1rem;margin-bottom:4px}
+.button.compact{padding:2px 4px;font-size:.72rem;border-radius:8px}
+.button.compact .button-icon{font-size:.8rem;margin-bottom:0;line-height:1}
 
 /*======== 调试控制台 ========*/
 .console-panel{background:rgba(10,10,10,.95);border-radius:12px;border:1px solid rgba(100,100,100,.4);padding:10px;flex-shrink:0;max-height:min(200px,35vh);display:flex;flex-direction:column;gap:6px}
@@ -244,9 +246,12 @@ const CONSOLE_PAGE_LIMIT = 20;
 
 /*======================== 按钮配置（2×3 六宫格）========================*/
 const buttonConfigs = [
-  {icon:"🔓",label:"解锁",   color:"#00ff88",desc:"解锁电机"},
-  {icon:"🔒",label:"上锁",   color:"#ff3333",desc:"锁定电机"},
-  {icon:"🛑",label:"急停",   color:"#ff0055",desc:"紧急停止"},
+  {icon:"🔓",label:"解锁",   color:"#00ff88",desc:"解锁电机",compact:true},
+  {icon:"🔒",label:"上锁",   color:"#ff3333",desc:"锁定电机",compact:true},
+  {icon:"🛑",label:"急停",   color:"#ff0055",desc:"紧急停止",compact:true},
+  {icon:"🔧",label:"马达自测", color:"#ffaa00",desc:"四个马达依次转动，每个 2 秒",compact:true},
+  {icon:"",   label:"2",     color:"#9aa7b0",desc:"预留按钮 2",compact:true},
+  {icon:"",   label:"3",     color:"#9aa7b0",desc:"预留按钮 3",compact:true},
   {icon:"🔄",label:"切换模式", color:"#00cfff",desc:"自稳→特技→定高 循环切换"},
   {icon:"🖥",label:"调试",   color:"#4a9eff",desc:"调试控制台"}
 ];
@@ -276,7 +281,7 @@ function initButtons() {
   container.innerHTML = '';
   buttonConfigs.forEach((cfg, idx) => {
     const btn = document.createElement('button');
-    btn.className = 'button';
+    btn.className = 'button' + (cfg.compact ? ' compact' : '');
     btn.id = `btn-${idx}`;
     btn.title = cfg.desc;
     btn.innerHTML = `<div class="button-icon">${cfg.icon}</div><div>${cfg.label}</div>`;
@@ -520,8 +525,20 @@ function resetLeftStick(targetRawY) {
 }
 /*======================== 按钮处理 ========================*/
 function handleButton(idx) {
-  if (idx === 4) { toggleConsole(); return; }
+  if (idx === 7) { toggleConsole(); return; }
   if (idx === 3) {
+    if (!confirm('确认已拆桨？四个马达将依次转动，每个 2 秒')) return;
+    fetch('/test/motors', { method:'POST' })
+      .then(r => r.json())
+      .then(() => showToast('🔧 马达自测：FL → FR → RL → RR'))
+      .catch(() => showToast('❌ 指令发送失败'));
+    return;
+  }
+  if (idx === 4 || idx === 5) {
+    showToast('按钮 ' + (idx - 2) + ' 未绑定');
+    return;
+  }
+  if (idx === 6) {
     // 模式循环：自稳(2)→特技(1)→定高(3)→自稳
     // 不在点击时弹 toast，结果完全依赖后端 resp.m 确认后触发
     let nextBit;
@@ -538,7 +555,7 @@ function handleButton(idx) {
   if (idx === 0 || idx === 1 || idx === 2) {
     if (idx === 0)      showToast('🔓 解锁中...');
     else if (idx === 1) showToast('🔒 上锁中...');
-    else if (idx === 2) showToast('🛑 急停指令发送中...');
+    else if (idx === 2) { showToast('🛑 急停指令发送中...'); fetch('/test/stop', { method:'POST' }).catch(()=>{}); }
     sendButtonData(idx, 1);
     setTimeout(() => sendButtonData(idx, 0), 100);
     if (navigator.vibrate) navigator.vibrate(30);
@@ -562,7 +579,7 @@ function showToast(msg) {
 /*======================== 调试控制台 ========================*/
 function toggleConsole() {
   const panel = document.getElementById('console-panel');
-  const btn   = document.getElementById('btn-5');
+  const btn   = document.getElementById('btn-7');
   const open  = panel.style.display === 'none';
   consolePanelOpen = open;
   panel.style.display = open ? 'flex' : 'none';

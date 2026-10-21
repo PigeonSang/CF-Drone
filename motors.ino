@@ -81,3 +81,44 @@ void testMotor(int n) {
 	sendMotors();
 	print("Done\n");
 }
+
+// ===== 马达自测：四路依次转动，每路 2 秒，无视上锁状态（仅限台架，务必拆桨）=====
+#define SELF_TEST_SPIN_TIME 2.0f
+#define SELF_TEST_GAP_TIME  0.4f
+#define SELF_TEST_DUTY      0.3f
+
+static const int SELF_TEST_ORDER[4] = {MOTOR_FRONT_LEFT, MOTOR_FRONT_RIGHT, MOTOR_REAR_LEFT, MOTOR_REAR_RIGHT};
+int   selfTestIndex  = -1;    // -1 = 空闲；0~3 = 当前第几个电机
+float selfTestNextAt = 0;     // 下一阶段切换时间
+bool  selfTestSpin   = false; // 当前阶段是否在转动
+
+void startMotorSelfTest() {
+	selfTestIndex  = 0;
+	selfTestSpin   = false;
+	selfTestNextAt = t + SELF_TEST_GAP_TIME;
+	print("Motor self-test: FL -> FR -> RL -> RR\n");
+}
+
+void stopMotorSelfTest() {
+	selfTestIndex = -1;
+	selfTestSpin  = false;
+}
+
+void updateMotorTest() {
+	if (selfTestIndex < 0) return; // 空闲：不干预 control() 的输出
+
+	if (t >= selfTestNextAt) {
+		if (!selfTestSpin) {          // 间隔结束 -> 开始转
+			selfTestSpin   = true;
+			selfTestNextAt = t + SELF_TEST_SPIN_TIME;
+		} else {                      // 转动结束 -> 进入间隔/下一个
+			selfTestSpin   = false;
+			selfTestNextAt = t + SELF_TEST_GAP_TIME;
+			if (++selfTestIndex >= 4) selfTestIndex = -1;
+		}
+	}
+
+	for (int i = 0; i < 4; i++) motors[i] = 0.0f;
+	if (selfTestIndex >= 0 && selfTestSpin)
+		motors[SELF_TEST_ORDER[selfTestIndex]] = SELF_TEST_DUTY;
+}

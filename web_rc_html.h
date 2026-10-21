@@ -94,7 +94,7 @@ body{font-family:'Roboto Mono',Arial,"Microsoft YaHei",sans-serif;background:#3c
 .button.active{background:linear-gradient(145deg,#1a73e8,#0d47a1);box-shadow:0 0 15px rgba(26,115,232,.6),inset 0 1px 0 rgba(255,255,255,.2);transform:scale(.95)}
 .button:active{transform:scale(.92)}
 .button-icon{font-size:1.1rem;margin-bottom:4px}
-.button.compact{padding:2px 4px;font-size:.72rem;border-radius:8px}
+.button.compact{padding:2px 2px;font-size:.66rem;border-radius:8px;white-space:nowrap;letter-spacing:-0.02em}
 .button.compact .button-icon{font-size:.8rem;margin-bottom:0;line-height:1}
 
 /*======== 调试控制台 ========*/
@@ -140,10 +140,10 @@ body{font-family:'Roboto Mono',Arial,"Microsoft YaHei",sans-serif;background:#3c
   .button-icon{font-size:0.88rem;margin-bottom:2px}
 }
 /*======== 网页看板娘 ========*/
-.mascot-wrap{display:flex;justify-content:center;align-items:flex-end;flex-shrink:0;min-height:0;pointer-events:none}
-.mascot{max-height:clamp(80px,20vh,220px);max-width:50%;object-fit:contain;opacity:.95;filter:drop-shadow(0 0 10px rgba(0,170,255,.25));animation:mascotFloat 4s ease-in-out infinite}
+.mascot-wrap{position:fixed;right:0;bottom:0;display:flex;justify-content:flex-end;align-items:flex-end;pointer-events:none;z-index:5}
+.mascot{height:clamp(120px,26vh,280px);width:auto;max-width:42vw;object-fit:contain;opacity:.95;filter:drop-shadow(0 0 10px rgba(0,170,255,.25));animation:mascotFloat 4s ease-in-out infinite}
 @keyframes mascotFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
-@media (max-height:520px){.mascot-wrap{display:none}}
+@media (max-height:520px){.mascot{height:clamp(90px,18vh,160px)}}
 
 /*======== 版权页脚 ========*/
 .footer{text-align:center;font-size:0.5rem;color:rgba(255,255,255,.25);padding:0;flex-shrink:0;line-height:0.8;}
@@ -203,7 +203,7 @@ body{font-family:'Roboto Mono',Arial,"Microsoft YaHei",sans-serif;background:#3c
     </div>
   </div>
   <!-- 看板娘 -->
-  <div class="mascot-wrap"><img class="mascot" src="/char.jpg" alt=""></div>
+  <div class="mascot-wrap"><img class="mascot" src="/char.webp" alt=""></div>
   <!-- 版权页脚 -->
   <div class="footer"><a href="https://oshwhub.com/songge8/project_qqqyfdkm" target="_blank">琛光无人机开源项目</a></div>
 </div>

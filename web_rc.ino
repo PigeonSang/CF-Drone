@@ -373,9 +373,9 @@ void setupWebRC() {
     });
 
     // 看板娘图片：直接从 PROGMEM 流式发送，不占堆内存
-    webRCServer.on("/char.jpg", HTTP_GET, []() {
+    webRCServer.on("/char.webp", HTTP_GET, []() {
         webRCServer.sendHeader("Cache-Control", "max-age=86400");
-        webRCServer.send_P(200, "image/jpeg", (PGM_P)webRCCharJpg, webRCCharJpgLen);
+        webRCServer.send_P(200, "image/webp", (PGM_P)webRCCharWebp, webRCCharWebpLen);
     });
 
     // 马达自测：四路依次转动，每路 2 秒（无视上锁状态，仅限台架使用）

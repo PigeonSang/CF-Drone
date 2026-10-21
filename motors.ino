@@ -83,13 +83,16 @@ void testMotor(int n) {
 }
 
 // ===== 马达自测：四路依次转动，每路 2 秒，无视上锁状态（仅限台架，务必拆桨）=====
-#define SELF_TEST_SPIN_TIME 2.0f
-#define SELF_TEST_GAP_TIME  0.4f
-#define SELF_TEST_DUTY      0.3f
+#define SELF_TEST_SPIN_TIME 0.5f   // 每个电机转动时长
+#define SELF_TEST_GAP_TIME  0.4f   // 两个电机之间的间隔
+#define SELF_TEST_DUTY      0.15f  // 稳态占空比（约为原来的 1/2）
+#define SELF_TEST_KICK_TIME 0.08f  // 起转助推时长（低占空比下 8520 可能起转困难）
+#define SELF_TEST_KICK_DUTY 0.30f  // 起转助推占空比
 
 static const int SELF_TEST_ORDER[4] = {MOTOR_FRONT_LEFT, MOTOR_FRONT_RIGHT, MOTOR_REAR_LEFT, MOTOR_REAR_RIGHT};
 int   selfTestIndex  = -1;    // -1 = 空闲；0~3 = 当前第几个电机
 float selfTestNextAt = 0;     // 下一阶段切换时间
+float selfTestSpinStart = 0;  // 当前电机开始转动的时刻
 bool  selfTestSpin   = false; // 当前阶段是否在转动
 
 void startMotorSelfTest() {
@@ -109,8 +112,9 @@ void updateMotorTest() {
 
 	if (t >= selfTestNextAt) {
 		if (!selfTestSpin) {          // 间隔结束 -> 开始转
-			selfTestSpin   = true;
-			selfTestNextAt = t + SELF_TEST_SPIN_TIME;
+			selfTestSpin      = true;
+			selfTestSpinStart = t;
+			selfTestNextAt    = t + SELF_TEST_SPIN_TIME;
 		} else {                      // 转动结束 -> 进入间隔/下一个
 			selfTestSpin   = false;
 			selfTestNextAt = t + SELF_TEST_GAP_TIME;
@@ -119,6 +123,9 @@ void updateMotorTest() {
 	}
 
 	for (int i = 0; i < 4; i++) motors[i] = 0.0f;
-	if (selfTestIndex >= 0 && selfTestSpin)
-		motors[SELF_TEST_ORDER[selfTestIndex]] = SELF_TEST_DUTY;
+	if (selfTestIndex >= 0 && selfTestSpin) {
+		// 前 80ms 用较高占空比把电机带起来，之后降到半速
+		float duty = (t - selfTestSpinStart < SELF_TEST_KICK_TIME) ? SELF_TEST_KICK_DUTY : SELF_TEST_DUTY;
+		motors[SELF_TEST_ORDER[selfTestIndex]] = duty;
+	}
 }

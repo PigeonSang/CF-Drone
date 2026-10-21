@@ -249,7 +249,7 @@ const buttonConfigs = [
   {icon:"🔓",label:"解锁",   color:"#00ff88",desc:"解锁电机",compact:true},
   {icon:"🔒",label:"上锁",   color:"#ff3333",desc:"锁定电机",compact:true},
   {icon:"🛑",label:"急停",   color:"#ff0055",desc:"紧急停止",compact:true},
-  {icon:"🔧",label:"马达自测", color:"#ffaa00",desc:"四个马达依次转动，每个 2 秒",compact:true},
+  {icon:"🔧",label:"马达自测", color:"#ffaa00",desc:"四个马达依次转动，每个 0.5 秒",compact:true},
   {icon:"",   label:"2",     color:"#9aa7b0",desc:"预留按钮 2",compact:true},
   {icon:"",   label:"3",     color:"#9aa7b0",desc:"预留按钮 3",compact:true},
   {icon:"🔄",label:"切换模式", color:"#00cfff",desc:"自稳→特技→定高 循环切换"},
@@ -527,7 +527,7 @@ function resetLeftStick(targetRawY) {
 function handleButton(idx) {
   if (idx === 7) { toggleConsole(); return; }
   if (idx === 3) {
-    if (!confirm('确认已拆桨？四个马达将依次转动，每个 2 秒')) return;
+    if (!confirm('确认已拆桨？四个马达将依次转动，每个 0.5 秒')) return;
     fetch('/test/motors', { method:'POST' })
       .then(r => r.json())
       .then(() => showToast('🔧 马达自测：FL → FR → RL → RR'))

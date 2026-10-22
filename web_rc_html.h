@@ -294,7 +294,7 @@ const buttonConfigs = [
   {icon:"🎯",label:"自动校正", color:"#00cfff",desc:"六面加速度校准（同 ca 指令）",compact:true},
   {icon:"🛑",label:"急停",   color:"#ff0055",desc:"紧急停止",compact:true},
   {icon:"🔧",label:"马达自测", color:"#ffaa00",desc:"四个马达依次转动，每个 0.5 秒",compact:true},
-  {icon:"🎮",label:"专业模式", color:"#9aa7b0",desc:"切换业余模式（单摇杆）",compact:true},
+  {icon:"🎮",label:"专业模式", color:"#9aa7b0",desc:"切换起步模式（单摇杆）",compact:true},
   {icon:"⚖",label:"配平",   color:"#00cfff",desc:"在线调整横滚/俯仰配平",compact:true},
   {icon:"🔄",label:"切换模式", color:"#00cfff",desc:"自稳→特技→定高 循环切换"},
   {icon:"🖥",label:"调试",   color:"#4a9eff",desc:"调试控制台"}
@@ -704,7 +704,7 @@ function setAmateurMode(on) {
 
   const btn = document.getElementById('btn-4');
   if (btn) {
-    btn.innerHTML = `<div class="button-icon">${amateurMode ? '🎓' : '🎮'}</div><div>${amateurMode ? '业余模式' : '专业模式'}</div>`;
+    btn.innerHTML = `<div class="button-icon">${amateurMode ? '🎓' : '🎮'}</div><div>${amateurMode ? '起步模式' : '专业模式'}</div>`;
   }
   const leftXItem  = document.getElementById('left-x').parentElement;
   const rightYItem = document.getElementById('right-y').parentElement;
@@ -726,7 +726,7 @@ function setAmateurMode(on) {
   requestAnimationFrame(() => { resetLeftStick(throttleY); resetRightStick(); });
   processJoystickInput();
   sendJoystickData();
-  showToast(amateurMode ? '🎓 业余模式：左油门 / 右偏航' : '🎮 专业模式：双摇杆');
+  showToast(amateurMode ? '🎓 起步模式：左油门 / 右偏航' : '🎮 专业模式：双摇杆');
 }
 
 /*======================== 按钮处理 ========================*/

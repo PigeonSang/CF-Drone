@@ -449,7 +449,7 @@ void setupWebRC() {
             first = false;
             json += "\"";
             String line = consoleBuf[idx];
-            line.replace("\\", "\\\\");  // \ → \\
+            line.replace("\\", "\\\\");  // 反斜杠转义（注释别以反斜杠结尾，会续行吃掉下一行代码）
             line.replace("\"", "\\\"");  // " → \"
             line.replace("\n", "\\n");    // 兜底：换行 → \n
             line.replace("\r", "\\r");    // 兜底：CR   → \r

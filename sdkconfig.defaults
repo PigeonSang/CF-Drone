@@ -1,0 +1,24 @@
+# CF-Drone — ESP-IDF 默认配置
+# 目标：与现有 arduino-cli 构建（ESP32-S3 Dev Module + Huge APP 分区）保持一致。
+# 目标芯片（esp32 / esp32s3 / esp32c3）请在 VS Code 里用
+# “ESP-IDF: Set Espressif Device Target” 选择，不写在这里。
+
+# Flash 4MB（分区表最后一段到 0x400000 结束）
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+
+# 自定义分区表（复用 arduino-cli 的 Huge APP 布局）
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+
+# Arduino-as-component：由 Arduino 提供 app_main()，再创建 loopTask 调用 setup()/loop()
+# 关掉后链接会报 undefined reference to `app_main`
+CONFIG_AUTOSTART_ARDUINO=y
+
+# Arduino 生态默认 1kHz tick，飞控控制环依赖这个节拍
+CONFIG_FREERTOS_HZ=1000
+
+# TaskStatus_t 需要 xCoreID 与 ulRunTimeCounter（Arduino 核心默认开启，
+# cli.ino 的 sys 命令要打印每个任务的核心号与 CPU 占用）
+CONFIG_FREERTOS_USE_TRACE_FACILITY=y
+CONFIG_FREERTOS_VTASKLIST_INCLUDE_COREID=y
+CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS=y

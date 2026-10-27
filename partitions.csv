@@ -1,0 +1,8 @@
+# CF-Drone 分区表 —— 与 arduino-cli 的 "Huge APP (3MB No OTA/1MB SPIFFS)" 等价
+# 来源：build/.tmp-esp32s3/partitions.csv（原样复用，保证固件布局一致）
+# Name,   Type, SubType, Offset,  Size, Flags
+nvs,      data, nvs,     0x9000,  0x5000,
+otadata,  data, ota,     0xe000,  0x2000,
+app0,     app,  ota_0,   0x10000, 0x300000,
+spiffs,   data, spiffs,  0x310000,0xE0000,
+coredump, data, coredump,0x3F0000,0x10000,

@@ -39,8 +39,8 @@ const char* motd =
 "ap <ssid> <password> - 配置AP模式SSID和密码\n"
 "sta <ssid> <password> - 配置STA客户端模式\n"
 "raw/stab/acro/auto - 飞行模式设定\n"
-"arm - 解锁无人机\n"
-"disarm - 锁定无人机\n"
+"arm - 解锁（忽略电压保护，仅限台架/调试）\n"
+"disarm - 锁定无人机（恢复电压保护）\n"
 "psq - 显示姿态四元数\n"
 "imu - 显示IMU数据\n"
 "time - 显示时间信息\n"
@@ -146,10 +146,21 @@ void doCommand(String str, bool echo = false) {
 		print("landed: %d\n", landed);
 	} else if (command == "arm") {
 		extern bool imuOK;
-		if (!imuOK) { print("IMU故障，禁止解锁！\n"); }
-		else armed = true;
+		extern float batteryVoltage;
+		extern bool batteryFailsafeBypass;
+		if (!imuOK) {
+			print("IMU故障，禁止解锁！\n");
+		} else {
+			armed = true;
+			batteryFailsafeBypass = true; // 忽略电压保护，仅限台架/调试
+			print("已解锁（忽略电压保护），当前电池 %.2fV\n", batteryVoltage);
+			print("注意：本次解锁期间低电保护不生效，上锁或重启后恢复\n");
+		}
 	} else if (command == "disarm") {
+		extern bool batteryFailsafeBypass;
 		armed = false;
+		batteryFailsafeBypass = false;
+		print("已上锁，电压保护恢复\n");
 	} else if (command == "raw") {
 		mode = RAW;
 	} else if (command == "stab") {

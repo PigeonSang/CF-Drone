@@ -116,7 +116,9 @@ private:
 #endif
 
 protected:
-	bool setupInterrupt(int pin = -1) {
+	// 注意：不要重载为 setupInterrupt(int)，否则会隐藏 IMUInterface::setupInterrupt()
+	// 纯虚函数（-Woverloaded-virtual 会直接报错），这里用独立名字。
+	bool setupInterruptOnPin(int pin = -1) {
 		if (usingInterrupt) return true; // already set
 
 		if (pin == -1) {

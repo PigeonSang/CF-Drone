@@ -306,7 +306,7 @@ bool MPU9250::setSrd(const uint8_t srd) {
   return true;
 }
 bool MPU9250::setDLPF(const DLPF dlpf) {
-  DlpfBandwidth val;
+  DlpfBandwidth val = DLPF_BANDWIDTH_184HZ;  // 默认值，避免 maybe-uninitialized
   switch (dlpf) {
     case DLPF_OFF:
       log("Disabling DLPF is not yet implemented");
@@ -324,6 +324,9 @@ bool MPU9250::setDLPF(const DLPF dlpf) {
     case DLPF_5HZ_APPROX:
       val = DLPF_BANDWIDTH_5HZ;
       break;
+    default:
+      log("Unknown DLPF setting");
+      return false;
   }
   return setDlpfBandwidth(val);
 }
@@ -509,7 +512,7 @@ float MPU9250::getRate() {
   return 1000.0f / (srd_ + 1);
 }
 bool MPU9250::setupInterrupt() {
-  if (!IMUBase::setupInterrupt(int_pin_)) {
+  if (!IMUBase::setupInterruptOnPin(int_pin_)) {
     log(errorFmt, status_ = 22);
     return false;
   }

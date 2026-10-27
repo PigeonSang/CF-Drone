@@ -146,18 +146,26 @@ void invertedFailsafe() {
 // L1（3.4V）：未解锁禁止解锁（在 control.ino 处理），怠速时自动上锁
 // L2（2.8V）：飞行中仅 LED 快闪告警
 // L3（2.6V）：飞行中自动降落（复用 descend()，速度由 SF_DESCEND_TIME 控制）
+// CLI `arm` 强制解锁时置位：本次解锁期间跳过全部电池保护（仅限台架/调试）
+// 任何方式上锁后自动清零，恢复保护
+bool batteryFailsafeBypass = false;
+
 void batteryFailsafe() {
 	static bool l3Latched = false;
 	static float lowSince = 0.0f;
 	static float l3LastNotify = 0.0f;
 
-	if (batteryVoltage < VBAT_ABSENT_THRESHOLD) return; // 未接电池，忽略
+	// 未解锁：清状态，并让强制解锁失效
 	if (!armed) {
+		batteryFailsafeBypass = false;
 		l3Latched = false;
 		lowSince = 0.0f;
 		l3LastNotify = 0.0f;
 		return;
 	}
+
+	if (batteryFailsafeBypass) return; // 强制解锁：L1/L2/L3 全部不生效
+	if (batteryVoltage < VBAT_ABSENT_THRESHOLD) return; // 未接电池，忽略
 
 	// L3 已触发后保持降落，直到上锁，避免阈值附近反复进出
 	if (l3Latched) {

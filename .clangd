@@ -1,2 +1,104 @@
 CompileFlags:
-    Remove: [-f*, -m*]
+  Remove: [-f*, -m*]
+  Add: [-Wno-unused-function]
+  CompilationDatabase: build-idf
+
+# .ino 不在 compile_commands.json 里。clangd 会随便套一条命令，
+# 套到汇编文件上就会报 fe_expected_compiler_job。
+# 这里固定用 main.cpp 的 C++ 命令，并按拼接顺序补上前面的片段。
+---
+If:
+  PathMatch: .*\.ino$
+CompileFlags:
+  CompilationDatabase: clangd
+
+---
+If:
+  PathMatch: .*(^|[/\\])CF-Drone\.ino$
+CompileFlags:
+  Add: [-DCLANGD_PART=0, -include, clangd/ino_prefix.h, -xc++]
+---
+If:
+  PathMatch: .*(^|[/\\])battery\.ino$
+CompileFlags:
+  Add: [-DCLANGD_PART=1, -include, clangd/ino_prefix.h, -xc++]
+---
+If:
+  PathMatch: .*(^|[/\\])cli\.ino$
+CompileFlags:
+  Add: [-DCLANGD_PART=2, -include, clangd/ino_prefix.h, -xc++]
+---
+If:
+  PathMatch: .*(^|[/\\])control\.ino$
+CompileFlags:
+  Add: [-DCLANGD_PART=3, -include, clangd/ino_prefix.h, -xc++]
+---
+If:
+  PathMatch: .*(^|[/\\])estimate\.ino$
+CompileFlags:
+  Add: [-DCLANGD_PART=4, -include, clangd/ino_prefix.h, -xc++]
+---
+If:
+  PathMatch: .*(^|[/\\])imu\.ino$
+CompileFlags:
+  Add: [-DCLANGD_PART=5, -include, clangd/ino_prefix.h, -xc++]
+---
+If:
+  PathMatch: .*(^|[/\\])led\.ino$
+CompileFlags:
+  Add: [-DCLANGD_PART=6, -include, clangd/ino_prefix.h, -xc++]
+---
+If:
+  PathMatch: .*(^|[/\\])log\.ino$
+CompileFlags:
+  Add: [-DCLANGD_PART=7, -include, clangd/ino_prefix.h, -xc++]
+---
+If:
+  PathMatch: .*(^|[/\\])mavlink\.ino$
+CompileFlags:
+  Add: [-DCLANGD_PART=8, -include, clangd/ino_prefix.h, -xc++]
+---
+If:
+  PathMatch: .*(^|[/\\])motors\.ino$
+CompileFlags:
+  Add: [-DCLANGD_PART=9, -include, clangd/ino_prefix.h, -xc++]
+---
+If:
+  PathMatch: .*(^|[/\\])parameters\.ino$
+CompileFlags:
+  Add: [-DCLANGD_PART=10, -include, clangd/ino_prefix.h, -xc++]
+---
+If:
+  PathMatch: .*(^|[/\\])rc\.ino$
+CompileFlags:
+  Add: [-DCLANGD_PART=11, -include, clangd/ino_prefix.h, -xc++]
+---
+If:
+  PathMatch: .*(^|[/\\])safety\.ino$
+CompileFlags:
+  Add: [-DCLANGD_PART=12, -include, clangd/ino_prefix.h, -xc++]
+---
+If:
+  PathMatch: .*(^|[/\\])time\.ino$
+CompileFlags:
+  Add: [-DCLANGD_PART=13, -include, clangd/ino_prefix.h, -xc++]
+---
+If:
+  PathMatch: .*(^|[/\\])web_rc\.ino$
+CompileFlags:
+  Add: [-DCLANGD_PART=14, -include, clangd/ino_prefix.h, -xc++]
+---
+If:
+  PathMatch: .*(^|[/\\])wifi\.ino$
+CompileFlags:
+  Add: [-DCLANGD_PART=15, -include, clangd/ino_prefix.h, -xc++]
+
+---
+# 头文件走 clangd/ 那份数据库：里面除了 16 条 .ino，还有 ino_prefix.h 一条。
+# 否则头文件会在 build-idf 里查（没有它），推断失败退化成空命令。
+# 同时强制 C++，避免 pid.h / lpf.h 被当成 C 语言（'template'、'class' 未知类型）。
+If:
+  PathMatch: .*\.(h|hpp)$
+CompileFlags:
+  CompilationDatabase: clangd
+  Add: [-xc++]

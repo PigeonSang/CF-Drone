@@ -12,6 +12,11 @@
 
 #pragma once
 
+// 正式编译时 main.cpp 会先包含 Arduino.h。clang 单独打开本文件时没有这一步，
+// stdint.h 补上 uint8_t / uint16_t；String 只出现在声明里，前置声明就够。
+#include <stdint.h>
+class String;
+
 void setup();
 void loop();
 
@@ -42,7 +47,8 @@ void readIMU();
 void calibrateGyroOnce();
 void calibrateAccel();
 void calibrateAccelOnce();
-void calibrateAccelGuided();
+bool calibrateAccelGuided();
+void calibrateAccelThenLevel();
 void calibrateLevel();
 void printIMUCalibration();
 void printIMUInfo();

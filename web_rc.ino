@@ -421,6 +421,12 @@ void setupWebRC() {
         webRCServer.send(200, "application/json", json);
     });
 
+    webRCServer.on("/reboot", HTTP_POST, []() {
+        webRCServer.send(200, "application/json", "{\"ok\":1}");
+        delay(80); // 先把响应发出去，再走和 CLI reboot 相同的复位
+        ESP.restart();
+    });
+
     // 马达自测：四路依次转动，每路 2 秒（无视上锁状态，仅限台架使用）
     webRCServer.on("/test/motors", HTTP_POST, []() {
         startMotorSelfTest();

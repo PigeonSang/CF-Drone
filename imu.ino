@@ -263,11 +263,11 @@ static bool sampleAccelPose(Vector& avg, Vector& sd, int samples = 600) {
 	return true;
 }
 
-void calibrateAccelGuided() {
+bool calibrateAccelGuided() {
 #if WEB_RC_ENABLED
 	WebLogGuard webLogGuard;
 #endif
-	if (armed) { print("请先上锁（disarm）后再校准\n"); return; }
+	if (armed) { print("请先上锁（disarm）后再校准\n"); return false; }
 
 	print("========== 加速度计六面校准（手动扶平版）==========\n");
 	print("每面放稳后手离开，看到 ✓ 再换下一面；摆偏超过 12 度会自动要求重做。\n");
@@ -325,7 +325,7 @@ void calibrateAccelGuided() {
 		if (!done) {
 			print("✗ 这一面连续 3 次失败，校准取消（参数未改变）\n");
 			configureIMU();
-			return;
+			return false;
 		}
 	}
 
@@ -340,7 +340,7 @@ void calibrateAccelGuided() {
 			print("✗ %c 轴缺少一个方向（缺 %s），校准取消\n",
 			      (char)('X' + i), hasPos[i] ? "负向" : "正向");
 			configureIMU();
-			return;
+			return false;
 		}
 	}
 
@@ -361,7 +361,7 @@ void calibrateAccelGuided() {
 			print("✗ %c 轴刻度解算为 %.3f（应在 0.85~1.15），多半有面没放好，校准取消\n",
 			      (char)('X' + i), sc);
 			configureIMU();
-			return;
+			return false;
 		}
 	}
 
@@ -384,6 +384,25 @@ void calibrateAccelGuided() {
 
 	printIMUCalibration();
 	print("✓ 校准完成，最大残差 %.3f。放平后执行 ps 检查零点。\n", maxErr);
+	return true;
+}
+
+// 网页「自动校正」：六面成功后接着做水平零点。最后一面是倒扣，
+// 先等机身被翻动，再进入 cl，避免把倒扣姿态写成配平。
+void calibrateAccelThenLevel() {
+	if (!calibrateAccelGuided()) return;
+	print("六面完成。请把飞机翻回水平面，手离开…\n");
+	unsigned long t0 = millis();
+	bool moved = false;
+	while (millis() - t0 < 30000) {
+		calPump();
+		if (gyro.norm() > 0.15f) { moved = true; break; }
+	}
+	if (!moved) {
+		print("✗ 30 秒内没有检测到翻转机身，已跳过水平校正。放平后可单独执行 cl。\n");
+		return;
+	}
+	calibrateLevel();
 }
 
 // ==================== 水平零点校正（自动写配平）====================

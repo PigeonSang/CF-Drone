@@ -203,6 +203,8 @@ void doCommand(String str, bool echo = false) {
 		calibrateRC();
 	} else if (command == "ca") {
 		calibrateAccelGuided(); // 手动扶平优化版：静止检测 + 质量校验 + 残差报告
+	} else if (command == "cacl") {
+		calibrateAccelThenLevel(); // 网页「自动校正」：ca 成功后再做 cl
 	} else if (command == "cl") {
 		calibrateLevel();        // 水平零点校正：按当前姿态自动写 CTL_TRIM_*
 	} else if (command == "mfr") {

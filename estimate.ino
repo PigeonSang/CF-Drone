@@ -18,7 +18,7 @@ float levelMaxTilt = radians(30); // rad, level correction fades out at this til
 //   - 值越小，门控越灵敏（轻微打杆即停止修正），悬停抑漂效果减弱。
 //   - 值越大，打杆时 applyLevel 干扰更久，现象三改善减弱。
 //   - 推荐范围：0.2（灵敏）~ 0.4（宽松），默认 0.2（摇杆 20% 行程时权重归零）。
-//   - 可通过 CLI 在线修改：p EST_LVL_GATE_THR <值>
+//   - 可通过 CLI 在线修改：p EST_LVL_GATE_THR <值>XI,
 float levelGateThreshold = 0.2f; // 摇杆门控阈值，参数名：EST_LVL_GATE_THR
 
 // ============== Mahony 风格水平修正 I 项 ==============

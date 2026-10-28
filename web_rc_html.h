@@ -153,22 +153,6 @@ body.console-open .console-panel{margin-bottom:calc(clamp(88px,14vh,130px) - 6px
 body.console-open .mascot-debug{display:block}
 body.console-open .mascot-wrap{display:none}
 
-/*======== 配平弹窗 ========*/
-.trim-modal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:40}
-.trim-modal.show{display:flex}
-.trim-box{background:#2b2b2b;border:1px solid #555;border-radius:14px;padding:16px 18px;width:min(92vw,360px);
-  box-shadow:0 10px 30px rgba(0,0,0,.5);color:#fff}
-.trim-title{font-size:15px;font-weight:700;text-align:center;margin-bottom:12px}
-.trim-row{display:flex;align-items:center;gap:6px;margin:8px 0;font-size:12px}
-.trim-row>span{flex:1}
-.trim-row input{width:78px;background:#1b1b1b;border:1px solid #555;border-radius:6px;color:#0f8;
-  padding:4px 6px;font-size:12px;text-align:center}
-.trim-row button{width:26px;height:26px;border-radius:6px;border:none;background:#3a3a3a;color:#fff;font-size:14px;cursor:pointer}
-.trim-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
-.trim-actions button{padding:6px 14px;border-radius:8px;border:none;font-size:12px;cursor:pointer}
-#trim-cancel{background:#444;color:#ddd}
-#trim-apply{background:#1a73e8;color:#fff}
-
 /*======== 看板娘对话框 ========*/
 .mascot-bubble{position:absolute;right:100%;bottom:45%;margin-right:10px;z-index:1;background:#fff;color:#222;
   padding:6px 10px;border-radius:11px;box-shadow:0 5px 14px rgba(0,0,0,.3);font-size:12px;font-weight:700;
@@ -318,80 +302,14 @@ const CONSOLE_PAGE_LIMIT = 20;
 /*======================== 按钮配置（2×3 六宫格）========================*/
 const buttonConfigs = [
   {icon:"🔒",label:"点击解锁", color:"#ff3333",desc:"解锁/上锁（文字为下一步动作）",compact:true},
-  {icon:"🎯",label:"自动校正", color:"#00cfff",desc:"六面加速度校准（同 ca 指令）",compact:true},
+  {icon:"🎯",label:"自动校正", color:"#00cfff",desc:"六面校准完成后自动水平校正（ca 然后 cl）",compact:true},
   {icon:"🛑",label:"急停",   color:"#ff0055",desc:"紧急停止",compact:true},
   {icon:"🔧",label:"马达自测", color:"#ffaa00",desc:"四个马达依次转动，每个 0.5 秒",compact:true},
   {icon:"🎮",label:"专业模式", color:"#9aa7b0",desc:"切换起步模式（油门+配平键）",compact:true},
-  {icon:"⚖",label:"配平",   color:"#00cfff",desc:"在线调整横滚/俯仰配平",compact:true},
+  {icon:"⏻",label:"重启", color:"#ff8844",desc:"重启飞控（同 reboot 指令）",compact:true},
   {icon:"🔄",label:"切换模式", color:"#00cfff",desc:"自稳→特技→定高 循环切换"},
   {icon:"🖥",label:"调试",   color:"#4a9eff",desc:"调试控制台"}
 ];
-
-/*======================== 配平弹窗 ========================*/
-function openTrimDialog() {
-  let m = document.getElementById('trim-modal');
-  if (!m) {
-    m = document.createElement('div');
-    m.id = 'trim-modal';
-    m.className = 'trim-modal';
-    m.innerHTML = `
-      <div class="trim-box">
-        <div class="trim-title">姿态配平</div>
-        <div class="trim-row"><span>横滚 CTL_TRIM_ROLL</span>
-          <button data-trim="roll" data-d="-1">−</button>
-          <input id="trim-roll" type="number" step="0.001" inputmode="decimal">
-          <button data-trim="roll" data-d="1">+</button>
-        </div>
-        <div class="trim-row"><span>俯仰 CTL_TRIM_PITCH</span>
-          <button data-trim="pitch" data-d="-1">−</button>
-          <input id="trim-pitch" type="number" step="0.001" inputmode="decimal">
-          <button data-trim="pitch" data-d="1">+</button>
-        </div>
-        <div class="trim-actions">
-          <button id="trim-cancel">取消</button>
-          <button id="trim-apply">确定</button>
-        </div>
-      </div>`;
-    document.body.appendChild(m);
-    m.addEventListener('click', e => { if (e.target === m) closeTrimDialog(); });
-    m.querySelectorAll('button[data-trim]').forEach(b => {
-      b.addEventListener('click', () => {
-        const inp = document.getElementById(b.dataset.trim === 'roll' ? 'trim-roll' : 'trim-pitch');
-        let v = parseFloat(inp.value) || 0;
-        v += (b.dataset.d === '1' ? 1 : -1) * 0.001;
-        inp.value = v.toFixed(4);
-      });
-    });
-    document.getElementById('trim-cancel').addEventListener('click', closeTrimDialog);
-    document.getElementById('trim-apply').addEventListener('click', applyTrim);
-  }
-  fetch('/trim').then(r => r.json()).then(d => {
-    document.getElementById('trim-roll').value  = Number(d.roll  || 0).toFixed(4);
-    document.getElementById('trim-pitch').value = Number(d.pitch || 0).toFixed(4);
-    m.classList.add('show');
-  }).catch(() => {
-    document.getElementById('trim-roll').value  = '0.0000';
-    document.getElementById('trim-pitch').value = '0.0000';
-    m.classList.add('show');
-  });
-}
-
-function closeTrimDialog() {
-  const m = document.getElementById('trim-modal');
-  if (m) m.classList.remove('show');
-}
-
-function applyTrim() {
-  const roll  = parseFloat(document.getElementById('trim-roll').value)  || 0;
-  const pitch = parseFloat(document.getElementById('trim-pitch').value) || 0;
-  fetch('/trim', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({roll, pitch}) })
-    .then(r => r.json())
-    .then(d => {
-      if (d.ok) { showToast('✅ 配平已应用'); closeTrimDialog(); }
-      else showToast('❌ 配平写入失败');
-    })
-    .catch(() => showToast('❌ 发送失败'));
-}
 
 /*======================== 看板娘点击对话 ========================*/
 function initMascotClick() {
@@ -586,15 +504,21 @@ function handlePointerEnd(e, side) {
   const knob     = document.getElementById(`knob-${side}`);
   const joystick = document.getElementById(`joystick-${side}`);
   joystick.classList.remove('active');
-  // 计算归位目标：左摇杆Y轴非ALTHOLD时归底，其他归中
-  const targetRawY = (side === 'left' && currentFlightMode !== 3) ? -100 : 0;
-  const radius = stickRadius(side, joystick.getBoundingClientRect());
-  const targetDy = -targetRawY / 100 * radius;
-  knob.style.transition = 'transform 0.2s ease-out';
-  knob.style.transform  = `translate(calc(-50% + 0px), calc(-50% + ${targetDy}px))`;
-  setTimeout(() => { knob.style.transition = ''; }, 200);
-  if (side === 'left')  leftStick  = {x:0, y:0, rawX:0, rawY: targetRawY};
-  else                  rightStick = {x:0, y:0, rawX:0, rawY:0};
+  if (side === 'left') {
+    // 油门停在松手处。偏航（X）仍回中，避免松手后持续转头。
+    const heldY = leftStick.rawY;
+    const radius = stickRadius(side, joystick.getBoundingClientRect());
+    const dy = -heldY / 100 * radius;
+    knob.style.transition = 'transform 0.2s ease-out';
+    knob.style.transform  = `translate(calc(-50% + 0px), calc(-50% + ${dy}px))`;
+    setTimeout(() => { knob.style.transition = ''; }, 200);
+    leftStick = {x:0, y:heldY, rawX:0, rawY:heldY};
+  } else {
+    knob.style.transition = 'transform 0.2s ease-out';
+    knob.style.transform  = 'translate(-50%, -50%)';
+    setTimeout(() => { knob.style.transition = ''; }, 200);
+    rightStick = {x:0, y:0, rawX:0, rawY:0};
+  }
   processJoystickInput();
   sendJoystickData();
 }
@@ -630,7 +554,7 @@ function sendToESP(url, data) {
         if (resp.m !== currentFlightMode) {
           if (!resp.warn) showToast('✅ 已切换：' + (names[resp.m] || '未知'));
           const leftTouched = [...touches.values()].includes('left');
-          if (!leftTouched) resetLeftStick(resp.m === 3 ? 0 : -100);
+          if (!leftTouched) resetLeftStick(leftStick.rawY);
         }
         currentFlightMode = resp.m;
         document.getElementById('flight-mode').textContent = names[resp.m] || '自稳';
@@ -750,11 +674,10 @@ function setAmateurMode(on) {
   }
   if (!amateurMode) stopTrimHold();
 
-  // 定高模式（ALTHOLD）下油门杆表示爬升/下降速率，切换模式时保持当前杆量不变
-  const throttleY = (currentFlightMode === 3) ? leftStick.rawY : -100;
-  leftStick  = {x:0, y:0, rawX:0, rawY:throttleY};
+  const throttleY = leftStick.rawY;
+  leftStick  = {x:0, y:throttleY, rawX:0, rawY:throttleY};
   rightStick = {x:0, y:0, rawX:0, rawY:0};
-  // 等布局应用新尺寸后再归位，否则半径按旧尺寸计算
+  // 等布局应用新尺寸后再按当前油门归位，否则半径按旧尺寸计算
   requestAnimationFrame(() => { resetLeftStick(throttleY); resetRightStick(); });
   processJoystickInput();
   sendJoystickData();
@@ -852,7 +775,10 @@ function handleButton(idx) {
     return;
   }
   if (idx === 5) {
-    openTrimDialog();
+    if (!confirm('确认重启飞控？电机将立即停止')) return;
+    fetch('/reboot', { method:'POST' })
+      .then(() => showToast('🔄 正在重启'))
+      .catch(() => showToast('🔄 正在重启'));
     return;
   }
   if (idx === 6) {
@@ -876,14 +802,14 @@ function handleButton(idx) {
     if (navigator.vibrate) navigator.vibrate(30);
     return;
   }
-  // 自动校正：与 CLI 的 ca 指令等价（六面加速度校准）
+  // 自动校正：ca 成功后再执行 cl（水平零点写入配平）
   if (idx === 1) {
     if (isArmed) { showToast('请先上锁再校准'); return; }
-    if (!confirm('确认已拆桨并放在水平面上？\n将进入六面校准，约 1 分钟，请按控制台提示摆放姿态')) return;
+    if (!confirm('确认已拆桨？\n先做六面校准，完成后把飞机放回水平面，将自动做水平零点校正')) return;
     if (!consolePanelOpen) toggleConsole();
-    fetch('/console/cmd', { method:'POST', body:'ca' })
+    fetch('/console/cmd', { method:'POST', body:'cacl' })
       .then(r => r.json())
-      .then(() => showToast('🎯 校准已开始，请按控制台提示操作'))
+      .then(() => showToast('🎯 校准已开始。六面完成后把飞机放平'))
       .catch(() => showToast('❌ 指令发送失败'));
     return;
   }

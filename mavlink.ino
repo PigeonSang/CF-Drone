@@ -12,6 +12,7 @@ Rate telemetrySlow(2);
 Rate telemetryFast(BOARD_MAVLINK_TELEM_FAST_HZ);  // 遥测频率：C3=5Hz（降低WiFi占用）/ ESP32&S3=10Hz
 
 bool mavlinkConnected = false;
+unsigned long mavlinkLastRxMs = 0; // 最后一次收到 MAVLink 包的时刻（用于判断地面站是否真的在）
 String mavlinkPrintBuffer;
 
 extern float controlTime;
@@ -76,7 +77,10 @@ void sendMessage(const void *msg) {
 void receiveMavlink() {
 	uint8_t buf[MAVLINK_MAX_PACKET_LEN];
 	int len = receiveWiFi(buf, MAVLINK_MAX_PACKET_LEN);
-	if (len) mavlinkConnected = true;
+	if (len) {
+		mavlinkConnected = true;
+		mavlinkLastRxMs = millis();
+	}
 
 	// New packet, parse it
 	mavlink_message_t msg;

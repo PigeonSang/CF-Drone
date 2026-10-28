@@ -42,6 +42,8 @@ void readIMU();
 void calibrateGyroOnce();
 void calibrateAccel();
 void calibrateAccelOnce();
+void calibrateAccelGuided();
+void calibrateLevel();
 void printIMUCalibration();
 void printIMUInfo();
 

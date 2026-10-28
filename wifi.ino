@@ -36,9 +36,21 @@ void setupWiFi() {
 
 void sendWiFi(const uint8_t *buf, int len) {
 	if (WiFi.softAPgetStationNum() == 0 && !WiFi.isConnected()) return;
+
+	// 只有最近 5 秒真的收到过 MAVLink 包才发。
+	// 否则目标 IP 可能是失效的广播地址/旧地址：每次发送都要 ARP 重试并占住
+	// lwIP 的 pbuf，最终 endPacket() 持续报 ENOMEM(12) 刷屏。
+	extern unsigned long mavlinkLastRxMs;
+	unsigned long now = millis();
+	if (now - mavlinkLastRxMs > 5000) return;
+
+	// 发失败后退避 1 秒，避免连续失败把 lwIP 内存打满
+	static unsigned long blockedUntil = 0;
+	if (now < blockedUntil) return;
+
 	udp.beginPacket(udpRemoteIP, udpRemotePort);
 	udp.write(buf, len);
-	udp.endPacket();
+	if (!udp.endPacket()) blockedUntil = now + 1000;
 }
 
 int receiveWiFi(uint8_t *buf, int len) {

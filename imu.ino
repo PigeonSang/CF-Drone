@@ -165,3 +165,266 @@ void printIMUInfo() {
 	print("raw gyro: %f %f %f\n", rawGyro.x, rawGyro.y, rawGyro.z);
 	print("raw acc: %f %f %f\n", rawAcc.x, rawAcc.y, rawAcc.z);
 }
+
+// ==================== 加计标定（为"手动扶平"优化）====================
+// 相对于原来的 ca：
+//  1) 每面先等"陀螺静止 0.4s"再采样，采 600 点取均值。原版固定 8s/1000 点，
+//     手一抖、慢慢滑动、温度漂移都会把误差写进参数。
+//  2) 每面采完立刻校验"摆正偏差"（主分量与合矢量夹角）和抖动幅度，
+//     超标自动要求重做，最多 3 次，避免坏数据被写入。
+//  3) 不预设"哪个姿态对应哪个轴"，按实测主分量自动归类，安装旋转不会错配。
+//  4) 结束打印每面残差，能直接看出哪一面没放好。
+// 注意：读的是 imu.getAccel() 的原始值（未减 accBias、未除 accScale），
+//       否则会用旧标定值去标定新标定，越标越偏。
+
+#if WEB_RC_ENABLED
+extern bool webConsoleEnabled;
+// 校准期间强制把输出写进网页日志缓冲：即使调试面板没打开，
+// 事后打开面板也能看到完整的校准过程（否则 print 只走串口）。
+struct WebLogGuard {
+	bool prev;
+	WebLogGuard() : prev(webConsoleEnabled) { webConsoleEnabled = true; }
+	~WebLogGuard() { webConsoleEnabled = prev; }
+};
+#endif
+
+static const char* accelPoseNames[6] = {
+	"1/6 平放：底部朝下、机头朝前，放在水平面上",
+	"2/6 机头朝上：尾部着地、机身垂直（可轻靠墙面）",
+	"3/6 机头朝下：机头着地、机身垂直",
+	"4/6 右侧朝下：右侧着地、机身垂直",
+	"5/6 左侧朝下：左侧着地、机身垂直",
+	"6/6 完全倒扣：顶部朝下、底部朝上，水平"
+};
+
+// 校准期间维持系统运转：读 IMU、推进时间与姿态、保持 WiFi/MAVLink 存活
+static void calPump() {
+	readIMU();
+	step();
+	estimate();
+#if WEB_RC_ENABLED
+	readWebRC();
+#endif
+#if WIFI_ENABLED
+	static unsigned long lastMav = 0;
+	if (millis() - lastMav >= 100) {
+		lastMav = millis();
+		processMavlink();
+	}
+#endif
+}
+
+static float vectorComponent(const Vector& v, int i) {
+	return i == 0 ? v.x : (i == 1 ? v.y : v.z);
+}
+
+// 等待指定秒数，期间保持系统运转；每 2 秒打印一次倒计时
+static void waitSeconds(int sec) {
+	unsigned long start = millis();
+	int nextTick = sec;
+	while (millis() - start < (unsigned long)sec * 1000UL) {
+		calPump();
+		int left = sec - (int)((millis() - start) / 1000UL);
+		if (left < nextTick && left > 0 && left % 2 == 0) {
+			nextTick = left;
+			print("  %d…\n", left);
+		}
+	}
+}
+
+// 等静止 → 采样 → 返回均值与标准差
+static bool sampleAccelPose(Vector& avg, Vector& sd, int samples = 600) {
+	unsigned long t0 = millis();
+	unsigned long stillSince = 0;
+	bool still = false, ok = false;
+	while (millis() - t0 < 6000) {
+		calPump();
+		if (gyro.norm() < 0.03f) {
+			if (!still) { still = true; stillSince = millis(); }
+			else if (millis() - stillSince > 400) { ok = true; break; }
+		} else {
+			still = false;
+		}
+	}
+	if (!ok) return false;
+
+	Vector sum, sum2;
+	for (int i = 0; i < samples; i++) {
+		calPump();
+		Vector v;
+		imu.getAccel(v.x, v.y, v.z); // 原始值，传感器系
+		sum += v;
+		sum2 += Vector(v.x * v.x, v.y * v.y, v.z * v.z);
+		if ((i & 63) == 0) delay(1); // 让 WiFi 任务喘口气
+	}
+	avg = sum / (float)samples;
+	Vector var = sum2 / (float)samples - Vector(avg.x * avg.x, avg.y * avg.y, avg.z * avg.z);
+	sd = Vector(sqrtf(fmaxf(var.x, 0.0f)), sqrtf(fmaxf(var.y, 0.0f)), sqrtf(fmaxf(var.z, 0.0f)));
+	return true;
+}
+
+void calibrateAccelGuided() {
+#if WEB_RC_ENABLED
+	WebLogGuard webLogGuard;
+#endif
+	if (armed) { print("请先上锁（disarm）后再校准\n"); return; }
+
+	print("========== 加速度计六面校准（手动扶平版）==========\n");
+	print("每面放稳后手离开，看到 ✓ 再换下一面；摆偏超过 12 度会自动要求重做。\n");
+
+	imu.setAccelRange(imu.ACCEL_RANGE_2G);
+
+	Vector m[6];
+	int    axis[6];
+	float  dir[6];
+	int    got = 0;
+
+	for (int pose = 0; pose < 6; pose++) {
+		bool done = false;
+		for (int attempt = 0; attempt < 3 && !done; attempt++) {
+			print("%s%s\n", accelPoseNames[pose], attempt ? "（重试）" : "");
+			print("  8 秒后开始采样，请把机身放稳…\n");
+			waitSeconds(8);
+			print("  采样中…\n");
+			Vector avg, sd;
+			if (!sampleAccelPose(avg, sd)) {
+				print("   ✗ 6 秒内没检测到静止，请放稳再试\n");
+				continue;
+			}
+
+			int a = 0;
+			float best = fabsf(avg.x);
+			if (fabsf(avg.y) > best) { a = 1; best = fabsf(avg.y); }
+			if (fabsf(avg.z) > best) { a = 2; best = fabsf(avg.z); }
+
+			float mag = avg.norm();
+			if (mag < 1.0f) { print("   ✗ 读数异常，请检查 IMU\n"); continue; }
+
+			float tilt = degrees(acosf(constrain(best / mag, 0.0f, 1.0f)));
+			float s = (vectorComponent(avg, a) >= 0) ? 1.0f : -1.0f;
+
+			print("   采样 (%+.3f, %+.3f, %+.3f)  |a|=%.3f  偏斜 %.1f 度  抖动 %.3f\n",
+			      avg.x, avg.y, avg.z, mag, tilt, sd.norm());
+
+			if (tilt > 12.0f) { print("   ✗ 摆得太斜（>12 度），请重放\n"); continue; }
+			if (sd.norm() > 0.25f) { print("   ✗ 采样期间有抖动，请放稳\n"); continue; }
+
+			bool dup = false;
+			for (int k = 0; k < got; k++) {
+				if (axis[k] == a && dir[k] == s) dup = true;
+			}
+			if (dup) { print("   ✗ 这个方向已经采过，请按提示换姿态\n"); continue; }
+
+			m[got] = avg;
+			axis[got] = a;
+			dir[got] = s;
+			got++;
+			print("   ✓ 已记录 %d/6\n", got);
+			done = true;
+		}
+		if (!done) {
+			print("✗ 这一面连续 3 次失败，校准取消（参数未改变）\n");
+			configureIMU();
+			return;
+		}
+	}
+
+	Vector pos[3], neg[3];
+	bool hasPos[3] = {false, false, false}, hasNeg[3] = {false, false, false};
+	for (int k = 0; k < 6; k++) {
+		if (dir[k] > 0) { pos[axis[k]] = m[k]; hasPos[axis[k]] = true; }
+		else            { neg[axis[k]] = m[k]; hasNeg[axis[k]] = true; }
+	}
+	for (int i = 0; i < 3; i++) {
+		if (!hasPos[i] || !hasNeg[i]) {
+			print("✗ %c 轴缺少一个方向（缺 %s），校准取消\n",
+			      (char)('X' + i), hasPos[i] ? "负向" : "正向");
+			configureIMU();
+			return;
+		}
+	}
+
+	Vector newBias, newScale;
+	for (int i = 0; i < 3; i++) {
+		float vp = vectorComponent(pos[i], i);
+		float vn = vectorComponent(neg[i], i);
+		float b  = (vp + vn) * 0.5f;
+		float sc = (vp - vn) * 0.5f / ONE_G;
+		if (i == 0) { newBias.x = b; newScale.x = sc; }
+		if (i == 1) { newBias.y = b; newScale.y = sc; }
+		if (i == 2) { newBias.z = b; newScale.z = sc; }
+	}
+
+	for (int i = 0; i < 3; i++) {
+		float sc = vectorComponent(newScale, i);
+		if (sc < 0.85f || sc > 1.15f) {
+			print("✗ %c 轴刻度解算为 %.3f（应在 0.85~1.15），多半有面没放好，校准取消\n",
+			      (char)('X' + i), sc);
+			configureIMU();
+			return;
+		}
+	}
+
+	print("---- 每面残差（m/s^2，越小越好；>0.3 说明该面没放好）----\n");
+	float maxErr = 0.0f;
+	for (int k = 0; k < 6; k++) {
+		float g = dir[k] * ONE_G;
+		Vector pred;
+		pred.x = (axis[k] == 0 ? newScale.x * g : 0.0f) + newBias.x;
+		pred.y = (axis[k] == 1 ? newScale.y * g : 0.0f) + newBias.y;
+		pred.z = (axis[k] == 2 ? newScale.z * g : 0.0f) + newBias.z;
+		float err = (pred - m[k]).norm();
+		if (err > maxErr) maxErr = err;
+		print("  第 %d 面  %.3f\n", k + 1, err);
+	}
+
+	accBias  = newBias;
+	accScale = newScale;
+	configureIMU();
+
+	printIMUCalibration();
+	print("✓ 校准完成，最大残差 %.3f。放平后执行 ps 检查零点。\n", maxErr);
+}
+
+// ==================== 水平零点校正（自动写配平）====================
+// 前提：放置面必须真的水平。它把"当前估计的姿态角"写进 CTL_TRIM_*，
+// 让控制器以该值为目标——如果台面本身是斜的，会把斜度当成水平，反而引入漂移。
+void calibrateLevel() {
+#if WEB_RC_ENABLED
+	WebLogGuard webLogGuard;
+#endif
+	if (armed) { print("请先上锁后再做水平校正\n"); return; }
+
+	print("========== 水平零点校正 ==========\n");
+	print("前提：放置面必须水平（建议先用手机水平仪确认）。\n");
+	print("把飞机放平，手离开，保持不动…\n");
+
+	unsigned long t0 = millis();
+	unsigned long stillSince = 0;
+	bool still = false, ok = false;
+	while (millis() - t0 < 6000) {
+		calPump();
+		if (gyro.norm() < 0.03f) {
+			if (!still) { still = true; stillSince = millis(); }
+			else if (millis() - stillSince > 800) { ok = true; break; }
+		} else {
+			still = false;
+		}
+	}
+	if (!ok) { print("✗ 没有检测到静止\n"); return; }
+
+	Vector sum;
+	const int N = 800;
+	for (int i = 0; i < N; i++) {
+		calPump();
+		sum += attitude.toEuler();
+		if ((i & 63) == 0) delay(1);
+	}
+	Vector e = sum / (float)N;
+
+	print("实测姿态：roll %+.2f 度   pitch %+.2f 度\n", degrees(e.x), degrees(e.y));
+	setParameter("CTL_TRIM_ROLL",  e.x);
+	setParameter("CTL_TRIM_PITCH", e.y);
+	print("已写入 CTL_TRIM_ROLL=%.4f  CTL_TRIM_PITCH=%.4f（弧度）\n", e.x, e.y);
+	print("✓ 完成。ps 读数不会变，需试飞验证漂移方向。\n");
+}

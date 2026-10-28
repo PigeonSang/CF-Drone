@@ -110,6 +110,24 @@ void control() {
 #if WEB_RC_ENABLED
 	interpretWebRC();
 #endif
+
+	// 输入健全性检查：RC 通道未校准时 normalizeRC() 会写入 NaN，
+	// NaN 会一路传到姿态目标、混控和 ledcWrite，产生未定义的占空比。
+	// 这里直接拒绝解锁，避免"一解锁就乱转"。
+	if (invalid(controlRoll) || invalid(controlPitch) ||
+	    invalid(controlYaw) || invalid(controlThrottle)) {
+		static bool warned = false;
+		if (!warned) {
+			print("控制输入无效（RC 未校准？先执行 cr）—— 已拒绝解锁\n");
+			warned = true;
+		}
+		armed = false;
+		thrustTarget = 0.0f;
+		memset(motors, 0, sizeof(motors));
+		resetControlPIDs();
+		return;
+	}
+
 	failsafe();
 
 	// 解锁状态变化时清零积分；低油门/未解锁时持续清零，避免地面推油门时积分提前积满

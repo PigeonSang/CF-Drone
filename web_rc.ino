@@ -395,11 +395,26 @@ void setupWebRC() {
 
     webRCServer.on("/trim", HTTP_POST, []() {
         String body = webRCServer.arg("plain");
-        const char* r = findJsonValue(body.c_str(), "\"roll\"");
-        const char* p = findJsonValue(body.c_str(), "\"pitch\"");
-        if (!r || !p) { webRCServer.send(400, "application/json", "{\"ok\":0}"); return; }
-        bool ok1 = setParameter("CTL_TRIM_ROLL", atof(r));
-        bool ok2 = setParameter("CTL_TRIM_PITCH", atof(p));
+        const char* r  = findJsonValue(body.c_str(), "\"roll\"");
+        const char* p  = findJsonValue(body.c_str(), "\"pitch\"");
+        const char* rd = findJsonValue(body.c_str(), "\"droll\"");
+        const char* pd = findJsonValue(body.c_str(), "\"dpitch\"");
+        if (!r && !p && !rd && !pd) {
+            webRCServer.send(400, "application/json", "{\"ok\":0}");
+            return;
+        }
+        // 绝对量（配平弹窗）或增量（起步模式方向键）。setParameter 只改内存，
+        // 本圈随后的 control() 就会用上。飞行中 syncParameters() 不写 Flash，落地后再落盘。
+        float nr = r ? atof(r) : trimRoll;
+        float np = p ? atof(p) : trimPitch;
+        if (rd) nr += atof(rd);
+        if (pd) np += atof(pd);
+        if (rd || pd) {
+            nr = constrain(nr, -0.5f, 0.5f);
+            np = constrain(np, -0.5f, 0.5f);
+        }
+        bool ok1 = setParameter("CTL_TRIM_ROLL", nr);
+        bool ok2 = setParameter("CTL_TRIM_PITCH", np);
         char json[96];
         snprintf(json, sizeof(json), "{\"ok\":%d,\"roll\":%.4f,\"pitch\":%.4f}",
                  (ok1 && ok2) ? 1 : 0, trimRoll, trimPitch);
@@ -419,6 +434,40 @@ void setupWebRC() {
     });
     webRCServer.on("/web_rc",           HTTP_POST, handleWebRCRequest);
     webRCServer.on("/web_rc/heartbeat", HTTP_POST, handleWebRCRequest);
+
+    // 飞行日志下载（CSV）：不插线也能取日志。
+    // 不要用控制台敲 log dump —— 800 行会在 115200 串口上阻塞近 3 秒，
+    // 而且网页控制台只有 50 行缓冲，中间的数据会被冲掉。
+    webRCServer.on("/log.csv", HTTP_GET, []() {
+        webRCServer.sendHeader("Content-Disposition", "attachment; filename=flight.csv");
+        webRCServer.setContentLength(CONTENT_LENGTH_UNKNOWN);
+        webRCServer.send(200, "text/csv", "");
+
+        String buf;
+        buf.reserve(1024);
+
+        for (int c = 0; c < logColumnCount(); c++) {
+            buf += logColumnName(c);
+            buf += (c + 1 < logColumnCount()) ? "," : "\n";
+        }
+        webRCServer.sendContent(buf);
+        buf = "";
+
+        int rows = logRowCount();
+        for (int r = 0; r < rows; r++) {
+            if (logValue(r, 0) == 0) continue; // 空记录
+            for (int c = 0; c < logColumnCount(); c++) {
+                buf += String(logValue(r, c), 4);
+                buf += (c + 1 < logColumnCount()) ? "," : "\n";
+            }
+            if (buf.length() > 800) {
+                webRCServer.sendContent(buf);
+                buf = "";
+            }
+        }
+        if (buf.length()) webRCServer.sendContent(buf);
+        webRCServer.sendContent(""); // 结束分块传输
+    });
 
     webRCServer.on("/console", HTTP_GET, []() {
         int since = -1;
@@ -523,11 +572,26 @@ void setupWebRC() {
 // ==================== 主循环函数 ====================
 
 void readWebRC() {
-    webRCServer.handleClient();
+    // handleClient() 单次约 1ms（底层 accept/recv 的轮询开销），
+    // 而网页协议只有 20Hz。每圈都调等于把一半主循环时间浪费在空转上。
+    // 限到 100Hz（10ms 一次），对 20Hz 的页面仍有 5 倍余量。
+    // 实测 handleClient() 单次约 2ms（底层 socket 轮询），而页面只有 20Hz。
+    // 50Hz（20ms 一次）对 20Hz 的摇杆流仍有 2.5 倍余量，延迟 ≤20ms。
+    static unsigned long lastWebHandle = 0;
+    unsigned long nowMs = millis();
+    if (nowMs - lastWebHandle >= 20) {
+        lastWebHandle = nowMs;
+        webRCServer.handleClient();
+    }
 
     // ------旧PCB印刷地址访问 :8080 → 301跳转到80端口；旧地址全部淘汰后可删除------------
 #ifndef CONFIG_IDF_TARGET_ESP32C3
-    handleRedirect8080(); // 处理8080重定向，兼容旧PCB访问
+    // 8080 只是兼容旧印刷地址，没必要频繁 accept()；200ms 一次足够
+    static unsigned long lastRedirectCheck = 0;
+    if (millis() - lastRedirectCheck >= 200) {
+        lastRedirectCheck = millis();
+        handleRedirect8080();
+    }
 #endif
     // ------旧PCB印刷地址访问 :8080 → 301跳转到80端口；旧地址全部淘汰后可删除------------
     

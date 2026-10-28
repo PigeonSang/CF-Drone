@@ -1,0 +1,3 @@
+Command: cmake -G Ninja -DPYTHON_DEPS_CHECKED=1 -DPYTHON=C:\Espressif\python_env\idf5.5_py3.11_env\Scripts\python.exe -DESP_PLATFORM=1 -DIDF_TARGET=esp32 -DCCACHE_ENABLE=0 D:\officeapp\Microsoft VS Code\CF-Drone
+ESP Insights Project commit: v1.0.0-23-ga402e81-dirty
+ESP RainMaker Project commit: v1.0.0-23-ga402e81-dirty

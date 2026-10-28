@@ -15,8 +15,8 @@ public:
 
 	static Quaternion fromAxisAngle(const Vector& axis, float angle) {
 		float halfAngle = angle * 0.5;
-		float sin2 = sin(halfAngle);
-		float cos2 = cos(halfAngle);
+		float sin2 = sinf(halfAngle);
+		float cos2 = cosf(halfAngle);
 		float sinNorm = sin2 / axis.norm();
 		return Quaternion(cos2, axis.x * sinNorm, axis.y * sinNorm, axis.z * sinNorm);
 	}
@@ -29,12 +29,12 @@ public:
 	}
 
 	static Quaternion fromEuler(const Vector& euler) {
-		float cx = cos(euler.x / 2);
-		float cy = cos(euler.y / 2);
-		float cz = cos(euler.z / 2);
-		float sx = sin(euler.x / 2);
-		float sy = sin(euler.y / 2);
-		float sz = sin(euler.z / 2);
+		float cx = cosf(euler.x / 2);
+		float cy = cosf(euler.y / 2);
+		float cz = cosf(euler.z / 2);
+		float sx = sinf(euler.x / 2);
+		float sy = sinf(euler.y / 2);
+		float sz = sinf(euler.z / 2);
 
 		return Quaternion(
 			cx * cy * cz + sx * sy * sz,
@@ -50,7 +50,7 @@ public:
 		float w3 = u.x * v.y - u.y * v.x;
 
 		Quaternion ret(
-			dot + sqrt(dot * dot + w1 * w1 + w2 * w2 + w3 * w3),
+			dot + sqrtf(dot * dot + w1 * w1 + w2 * w2 + w3 * w3),
 			w1,
 			w2,
 			w3);
@@ -79,7 +79,7 @@ public:
 
 
 	float norm() const {
-		return sqrt(w * w + x * x + y * y + z * z);
+		return sqrtf(w * w + x * x + y * y + z * z);
 	}
 
 	void normalize() {
@@ -91,10 +91,10 @@ public:
 	}
 
 	void toAxisAngle(Vector& axis, float& angle) const {
-		angle = acos(w) * 2;
-		axis.x = x / sin(angle / 2);
-		axis.y = y / sin(angle / 2);
-		axis.z = z / sin(angle / 2);
+		angle = acosf(w) * 2;
+		axis.x = x / sinf(angle / 2);
+		axis.y = y / sinf(angle / 2);
+		axis.z = z / sinf(angle / 2);
 	}
 
 	Vector toRotationVector() const {
@@ -117,15 +117,15 @@ public:
 		if (sarg <= -0.99999) {
 			euler.x = 0;
 			euler.y = -0.5 * PI;
-			euler.z = -2 * atan2(y, x);
+			euler.z = -2 * atan2f(y, x);
 		} else if (sarg >= 0.99999) {
 			euler.x = 0;
 			euler.y = 0.5 * PI;
-			euler.z = 2 * atan2(y, x);
+			euler.z = 2 * atan2f(y, x);
 		} else {
-			euler.x = atan2(2 * (y * z + w * x), sqw - sqx - sqy + sqz);
-			euler.y = asin(sarg);
-			euler.z = atan2(2 * (x * y + w * z), sqw + sqx - sqy - sqz);
+			euler.x = atan2f(2 * (y * z + w * x), sqw - sqx - sqy + sqz);
+			euler.y = asinf(sarg);
+			euler.z = atan2f(2 * (x * y + w * z), sqw + sqx - sqy - sqz);
 		}
 		return euler;
 	}

@@ -145,10 +145,18 @@ bool readRC() {
 	if (rcRxPin < 0) return false; // RC 未启用
 
 	if (rcProtocol == 1) {
-		// CRSF 路径：读取串口数据到缓冲区，尝试解析完整帧
-		while (BOARD_RC_SERIAL.available() &&
-		       crsfBufLen < (int)sizeof(crsfBuf)) {
-			crsfBuf[crsfBufLen++] = BOARD_RC_SERIAL.read();
+		// CRSF 路径：一次性批量读取。
+		// 原来是逐字节 available()/read()，每圈最多 64 次；
+		// 接收机未接、RX 脚悬空时 420k 波特率会收到大量噪声字节，
+		// 实测这个循环每圈吃掉约 1ms（Loop rate 285 → 414）。
+		int space = (int)sizeof(crsfBuf) - crsfBufLen;
+		if (space > 0) {
+			int avail = BOARD_RC_SERIAL.available();
+			if (avail > space) avail = space;
+			if (avail > 0) {
+				int got = BOARD_RC_SERIAL.read(crsfBuf + crsfBufLen, avail);
+				if (got > 0) crsfBufLen += got;
+			}
 		}
 		if (parseCRSFBuffer()) {
 			normalizeRC();

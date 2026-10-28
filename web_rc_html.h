@@ -180,10 +180,21 @@ body.console-open .mascot-wrap{display:none}
 .mascot-bubble.in-console{right:10px;bottom:10px;margin-right:0}
 .mascot-bubble.in-console::after{right:-7px;bottom:10px}
 
-/*======== 业余模式单轴摇杆 ========*/
+/*======== 业余模式：左油门 + 右配平键 ========*/
 body.amateur #joystick-left{width:110px;height:var(--js-size);border-radius:55px}
 body.amateur #joystick-left .joystick-knob{width:calc(var(--js-size)*0.18);height:calc(var(--js-size)*0.18)}
 body.amateur #joystick-left::after{display:none}
+.trim-pad{display:none;width:min(100%,var(--js-size));height:min(100%,var(--js-size));
+  grid-template-columns:1fr 1.15fr 1fr;grid-template-rows:1fr 1.15fr 1fr;gap:clamp(4px,1vmin,8px)}
+body.amateur .trim-pad{display:grid}
+body.amateur #joystick-right{display:none}
+.trim-pad button{border:none;border-radius:12px;background:#3a3a3a;color:#fff;font-weight:700;
+  font-size:clamp(0.85rem,2.6vmin,1.25rem);cursor:pointer;box-shadow:0 3px 8px rgba(0,0,0,.35);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.15}
+.trim-pad button small{font-size:.62em;font-weight:500;opacity:.8}
+.trim-pad button.held,.trim-pad button:active{background:#1a73e8}
+.trim-center{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;
+  font-size:clamp(0.55rem,1.7vmin,0.75rem);color:#0f8;line-height:1.35;background:rgba(0,0,0,.35);border-radius:12px}
 
 /*======== 版权页脚 ========*/
 .footer{text-align:center;font-size:0.5rem;color:rgba(255,255,255,.25);padding:0;flex-shrink:0;line-height:0.8;}
@@ -224,11 +235,22 @@ body.amateur #joystick-left::after{display:none}
       <div class="buttons-grid" id="buttons-container"></div>
     </div>
 
-    <!-- 右摇杆 -->
+    <!-- 右摇杆；起步模式下换成配平方向键 -->
     <div class="joystick-container">
       <div class="joystick-title">右摇杆 (俯仰/横滚)</div>
       <div class="joystick-wrapper">
         <div class="joystick" id="joystick-right"><div class="joystick-knob" id="knob-right"></div></div>
+        <div class="trim-pad" id="trim-pad">
+          <span></span>
+          <button type="button" data-droll="0" data-dpitch="1">上<small>俯仰+</small></button>
+          <span></span>
+          <button type="button" data-droll="-1" data-dpitch="0">左<small>横滚−</small></button>
+          <div class="trim-center" id="trim-readout">横滚 +0.00°<br>俯仰 +0.00°</div>
+          <button type="button" data-droll="1" data-dpitch="0">右<small>横滚+</small></button>
+          <span></span>
+          <button type="button" data-droll="0" data-dpitch="-1">下<small>俯仰−</small></button>
+          <span></span>
+        </div>
       </div>
     </div>
   </div>
@@ -266,10 +288,15 @@ let rightStick = {x:0, y:0, rawX:0, rawY:0};
 let lastSentValues = { throttle:0, roll:0, pitch:0, yaw:0 };
 let lastForceSentTime = 0; // 上次强制重发的时间戳（performance.now()）
 let currentValues  = { throttle:0, roll:0, pitch:0, yaw:0 };
-let amateurMode = false;   // false=专业模式（双摇杆），true=业余模式（油门+偏航）
+let amateurMode = false;   // false=专业模式（双摇杆），true=起步模式（油门+配平键）
+const TRIM_STEP = 0.005;   // rad/次，约 0.3°，与 CTL_TRIM_* 建议步长一致
+const TRIM_REPEAT_MS = 160;
+let trimRoll = 0, trimPitch = 0;
+let trimBusy = false;
+let trimPending = {roll:0, pitch:0};
+let trimHold = null;
 let isArmed = false;       // 当前解锁状态（由飞控响应同步）
 const MIN_CHANGE_THRESHOLD = 0.5;
-const AMATEUR_PITCH_SCALE = 10 / 25.5;  // 业余模式俯仰限幅：满杆约 10°
 
 // 固定参数常量（替代前端参数调节面板，与后端 CONFIG_ 对应）
 const DEADZONE = 3;   // 死区（已移至后端 stickDeadzone 统一处理，前端不再使用）
@@ -294,7 +321,7 @@ const buttonConfigs = [
   {icon:"🎯",label:"自动校正", color:"#00cfff",desc:"六面加速度校准（同 ca 指令）",compact:true},
   {icon:"🛑",label:"急停",   color:"#ff0055",desc:"紧急停止",compact:true},
   {icon:"🔧",label:"马达自测", color:"#ffaa00",desc:"四个马达依次转动，每个 0.5 秒",compact:true},
-  {icon:"🎮",label:"专业模式", color:"#9aa7b0",desc:"切换起步模式（单摇杆）",compact:true},
+  {icon:"🎮",label:"专业模式", color:"#9aa7b0",desc:"切换起步模式（油门+配平键）",compact:true},
   {icon:"⚖",label:"配平",   color:"#00cfff",desc:"在线调整横滚/俯仰配平",compact:true},
   {icon:"🔄",label:"切换模式", color:"#00cfff",desc:"自稳→特技→定高 循环切换"},
   {icon:"🖥",label:"调试",   color:"#4a9eff",desc:"调试控制台"}
@@ -398,6 +425,8 @@ function init() {
   initMascotClick();
   initNetwork();
   initPointerEvents();
+  initTrimPad();
+  refreshTrim();
   requestAnimationFrame(animationLoop);
   requestAnimationFrame(initKnobPositions);
 }
@@ -475,10 +504,10 @@ function processJoystickInput() {
   // 油门：rawY∈[-100,+100]，后端 processThrottle: (raw+100)/(2*RAW_MAX)*100 → 0~100%
   // 姿态轴：归一化到[-1,1]做指数曲线后还原×100，后端除以RAW_MAX得[-1,1]
   if (amateurMode) {
-    // 业余模式：左杆仅油门，右杆仅偏航，横滚/俯仰固定为 0
+    // 起步模式：左杆仅油门。横滚/俯仰/偏航固定为 0，姿态靠配平键改 trim
     currentValues.throttle = leftStick.rawY;
-    currentValues.yaw      = applyCurve(rightStick.rawX / 100) * 100;
-    currentValues.pitch    = applyCurve(rightStick.rawY / 100) * 100 * AMATEUR_PITCH_SCALE;
+    currentValues.yaw      = 0;
+    currentValues.pitch    = 0;
     currentValues.roll     = 0;
   } else {
   currentValues.throttle = leftStick.rawY;
@@ -530,8 +559,9 @@ function sendButtonData(buttonIndex, state) {
 function updateDisplayAll() {
   document.getElementById('left-y').textContent  = Math.round((currentValues.throttle + 100) / 2);
   if (amateurMode) {
-    document.getElementById('right-x').textContent = Math.round(currentValues.yaw);
-    document.getElementById('right-y').textContent = Math.round(currentValues.pitch);
+    const deg = rad => (rad * 180 / Math.PI).toFixed(2) + '°';
+    document.getElementById('right-x').textContent = deg(trimRoll);
+    document.getElementById('right-y').textContent = deg(trimPitch);
   } else {
     document.getElementById('left-x').textContent  = Math.round(leftStick.x);
     document.getElementById('right-x').textContent = Math.round(rightStick.x);
@@ -710,13 +740,15 @@ function setAmateurMode(on) {
   const rightYItem = document.getElementById('right-y').parentElement;
   leftXItem.style.display  = amateurMode ? 'none' : '';
   rightYItem.style.display = '';
-  document.getElementById('right-x').previousElementSibling.textContent = amateurMode ? '偏航:' : '横滚:';
+  document.getElementById('right-x').previousElementSibling.textContent = amateurMode ? '横滚配平:' : '横滚:';
+  document.getElementById('right-y').previousElementSibling.textContent = amateurMode ? '俯仰配平:' : '俯仰:';
 
   const titles = document.querySelectorAll('.joystick-title');
   if (titles.length >= 2) {
     titles[0].textContent = amateurMode ? '左摇杆 (油门)' : '左摇杆 (油门/偏航)';
-    titles[1].textContent = amateurMode ? '右摇杆 (偏航/俯仰)' : '右摇杆 (俯仰/横滚)';
+    titles[1].textContent = amateurMode ? '配平' : '右摇杆 (俯仰/横滚)';
   }
+  if (!amateurMode) stopTrimHold();
 
   // 定高模式（ALTHOLD）下油门杆表示爬升/下降速率，切换模式时保持当前杆量不变
   const throttleY = (currentFlightMode === 3) ? leftStick.rawY : -100;
@@ -726,7 +758,82 @@ function setAmateurMode(on) {
   requestAnimationFrame(() => { resetLeftStick(throttleY); resetRightStick(); });
   processJoystickInput();
   sendJoystickData();
-  showToast(amateurMode ? '🎓 起步模式：左油门 / 右偏航' : '🎮 专业模式：双摇杆');
+  if (amateurMode) refreshTrim();
+  showToast(amateurMode ? '🎓 起步模式：左油门 / 右配平' : '🎮 专业模式：双摇杆');
+}
+
+function showTrimReadout() {
+  const el = document.getElementById('trim-readout');
+  if (!el) return;
+  const deg = rad => (rad >= 0 ? '+' : '') + (rad * 180 / Math.PI).toFixed(2) + '°';
+  el.innerHTML = '横滚 ' + deg(trimRoll) + '<br>俯仰 ' + deg(trimPitch);
+}
+
+function refreshTrim() {
+  fetch('/trim').then(r => r.json()).then(d => {
+    trimRoll = Number(d.roll || 0);
+    trimPitch = Number(d.pitch || 0);
+    showTrimReadout();
+  }).catch(() => {});
+}
+
+function queueTrim(droll, dpitch) {
+  trimRoll += droll;
+  trimPitch += dpitch;
+  showTrimReadout();
+  trimPending.roll += droll;
+  trimPending.pitch += dpitch;
+  flushTrim();
+}
+
+function flushTrim() {
+  if (trimBusy) return;
+  if (trimPending.roll === 0 && trimPending.pitch === 0) return;
+  const sent = {droll: trimPending.roll, dpitch: trimPending.pitch};
+  trimPending = {roll:0, pitch:0};
+  trimBusy = true;
+  fetch('/trim', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(sent)})
+    .then(r => r.json())
+    .then(d => {
+      if (typeof d.roll === 'number' && typeof d.pitch === 'number') {
+        trimRoll = d.roll + trimPending.roll;
+        trimPitch = d.pitch + trimPending.pitch;
+        showTrimReadout();
+      }
+    })
+    .catch(() => {
+      trimRoll -= sent.droll;
+      trimPitch -= sent.dpitch;
+      showTrimReadout();
+    })
+    .finally(() => { trimBusy = false; flushTrim(); });
+}
+
+function stopTrimHold(e) {
+  if (!trimHold) return;
+  if (e && e.pointerId !== undefined && trimHold.id !== e.pointerId) return;
+  clearInterval(trimHold.timer);
+  trimHold.btn.classList.remove('held');
+  trimHold = null;
+}
+
+function initTrimPad() {
+  document.querySelectorAll('#trim-pad button').forEach(btn => {
+    btn.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (trimHold) return;
+      const stepRoll = (Number(btn.dataset.droll) || 0) * TRIM_STEP;
+      const stepPitch = (Number(btn.dataset.dpitch) || 0) * TRIM_STEP;
+      const apply = () => queueTrim(stepRoll, stepPitch);
+      apply();
+      btn.classList.add('held');
+      try { btn.setPointerCapture(e.pointerId); } catch (err) {}
+      trimHold = {id: e.pointerId, timer: setInterval(apply, TRIM_REPEAT_MS), btn};
+    });
+    btn.addEventListener('pointerup', stopTrimHold);
+    btn.addEventListener('pointercancel', stopTrimHold);
+  });
 }
 
 /*======================== 按钮处理 ========================*/

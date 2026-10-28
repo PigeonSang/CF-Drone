@@ -129,8 +129,9 @@ Parameter parameters[] = {
 	// 采用互补滤波：陀螺仪积分提供高频动态，加速度计提供低频重力修正。
 	{"EST_ACC_WEIGHT",   &accWeight},          // 加速度计对姿态的修正权重（0~1），越大修正越强，但对振动越敏感
 	{"EST_RATES_LPF_A",  &ratesFilter.alpha},  // 角速率低通滤波器系数 alpha（0~1），越小截止频率越低（约 40Hz@0.2）
-	{"EST_LVL_GATE_THR", &levelGateThreshold}, // 摇杆门控阈值（0~1），摇杆偏转超过此比例时 applyLevel 权重渐变为零，防止打杆后松杆漂移
-	{"EST_LVL_BIAS_GAIN",&levelBiasGain},      // Mahony I 项增益：重力误差积分进虚拟陀螺偏置的速率，越大收敛越快（约 30s@0.00002）
+	// 注意：NVS 键名上限 15 字符，超了会 KEY_TOO_LONG 且永远存不进去
+	{"EST_LVL_GATE",     &levelGateThreshold}, // 摇杆门控阈值（0~1），摇杆偏转超过此比例时 applyLevel 权重渐变为零
+	{"EST_LVL_BIAS",     &levelBiasGain},      // Mahony I 项增益：重力误差积分进虚拟陀螺偏置的速率
 
 	// ===== 电机（引脚配置）=====
 	// 修改后立即调用 setupMotors() 重新初始化 LEDC 通道，无需重启。

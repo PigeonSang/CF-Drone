@@ -75,3 +75,15 @@ void printLogData() {
 		}
 	}
 }
+
+// ===== 供 Web 端直接下载 CSV（/log.csv）使用 =====
+// 用访问器而不是 extern 数组，避免和 logColumns（const int）的类型声明打架。
+int logRowCount() { return LOG_SIZE; }
+int logColumnCount() { return logColumns; }
+const char* logColumnName(int i) {
+	return (i >= 0 && i < logColumns) ? logEntries[i].name : "";
+}
+float logValue(int row, int col) {
+	return logBuffer[row][col];
+}
+

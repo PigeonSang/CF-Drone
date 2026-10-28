@@ -35,7 +35,7 @@ public:
 
 
 	float norm() const {
-		return sqrt(x * x + y * y + z * z);
+		return sqrtf(x * x + y * y + z * z);
 	}
 
 	void normalize() {
@@ -100,7 +100,7 @@ public:
 	}
 
 	static float angleBetween(const Vector& a, const Vector& b) {
-		return acos(constrain(dot(a, b) / (a.norm() * b.norm()), -1, 1));
+		return acosf(constrain(dot(a, b) / (a.norm() * b.norm()), -1.0f, 1.0f));
 	}
 
 	static Vector rotationVectorBetween(const Vector& a, const Vector& b) {

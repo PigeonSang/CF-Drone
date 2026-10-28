@@ -76,7 +76,7 @@ void applyLevel() {
 	}
 
 	Vector up = Quaternion::rotateVector(Vector(0, 0, 1), attitude);
-	float tilt = acos(constrain(up.z, -1.0f, 1.0f));
+	float tilt = acosf(constrain(up.z, -1.0f, 1.0f));
 
 	// 极近水平时跳过：tilt→0 时叉积方向对振动噪声极敏感，方向随机会引入无规律漂移
 	if (tilt < radians(0.1f)) return;

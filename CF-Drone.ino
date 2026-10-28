@@ -6,6 +6,7 @@
 #include "quaternion.h"
 #include "util.h"
 #include "board_config.h"
+#include "esp_log.h"
 
 // WiFi 和 Web 遥控器开关由 board_config.h 按芯片自动设置：
 // 如需手动覆盖，在此处 #undef 后重新 #define
@@ -23,7 +24,15 @@ Quaternion attitude; // 估计出的姿态（四元数）
 bool landed; // are we landed and stationary
 
 void setup() {
+	// 强制满频 240MHz。WiFi 省电/DFS 或异常复位后 CPU 可能停在 80/160MHz，
+	// 那样整个控制循环的开销会变成 2~3 倍（实测 285→371Hz 的残余很可能就是它）。
+	// 必须在 Serial.begin 之前调用，否则 UART 分频不会跟着更新，串口会乱码。
+	setCpuFrequencyMhz(240);
 	Serial.begin(115200); // 初始化串口，波特率115200
+	// 关闭 ESP-IDF 的 INFO 日志。WiFi 栈在 115200 波特率下每行日志约 7~9ms，
+	// 会在串口 TX 上排队并阻塞主循环，实测造成 17~20ms 的 dt 尖峰。
+	// 只保留 WARN/ERROR，WiFi 真出问题时仍然能看到。
+	esp_log_level_set("*", ESP_LOG_WARN);
 	disableBrownOut(); // 禁用ESP32低压复位检测，防止电机启动瞬间电压跌落导致误复位
 	print("琛光科技 CF-Drone Flight Controller\n"); // 品牌标识（LICENSE 附加条款第二条要求固件启动输出保留品牌名称）
 	print("程序开始初始化！\n");
@@ -44,24 +53,38 @@ void setup() {
 	print("================================\n");
 }
 
+// ===== 分段计时（开销约 8us/圈，可忽略）=====
+// 用 CLI 命令 `prof` 打印各段平均耗时并清零，用来定位主循环变慢的原因。
+uint32_t profUs[8];
+uint32_t profN;
+
 void loop() {
-	readIMU(); // 读取IMU原始数据（陀螺仪/加速度计），并完成校准与坐标旋转
-	step(); // 计算主循环步进时间 t 与时间差 dt，并统计循环频率
-	readRC(); // 读取遥控接收机输入
+	uint32_t a;
+
+	a = micros(); readIMU();   profUs[0] += micros() - a;
+	a = micros(); step();      profUs[1] += micros() - a;
+	a = micros(); readRC();    profUs[2] += micros() - a;
 #if WEB_RC_ENABLED
-	readWebRC();  // 读取Web遥控器输入
-	processConsoleCommandQueue(); // 将网页命令放到主循环执行，避免阻塞HTTP回调
+	a = micros(); readWebRC(); processConsoleCommandQueue(); profUs[3] += micros() - a;
 #endif
-	estimate(); // 姿态与状态估计（互补滤波融合IMU数据）
-	updateBatteryVoltage(); // 更新电池电压采样与低电压保护判断
-	control(); // 飞控核心：姿态环PID解算，输出电机控制量
-	updateMotorTest(); // 马达自测（仅在自测激活时覆盖电机输出）
-	sendMotors(); // 将电机控制量输出到电机（PWM/DShot）
-	handleInput(); // 处理串口/Web控制台输入命令
+	a = micros(); estimate();  profUs[4] += micros() - a;
+	a = micros();
+	updateBatteryVoltage();
+	control();
+	updateMotorTest();
+	sendMotors();
+	profUs[5] += micros() - a;
+	a = micros();
+	handleInput();
 #if WIFI_ENABLED
-	processMavlink(); // 处理MAVLink通信
+	processMavlink();
 #endif
-	logData(); // 记录飞行日志数据
-	syncParameters(); // 参数变更后延迟写入Flash，避免频繁擦写
-	updateLED(); // 根据当前飞行状态刷新LED指示效果
+	profUs[6] += micros() - a;
+	a = micros();
+	logData();
+	syncParameters();
+	updateLED();
+	profUs[7] += micros() - a;
+
+	profN++;
 }

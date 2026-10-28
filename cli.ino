@@ -31,7 +31,8 @@ const char* motd =
 "p MOT_PIN_FL 14 - 参数设置示例，前左电机引脚为14\n"
 "preset - 重置参数存储，设置参数后运行此命令\n"
 "mfr, mfl, mrr, mrl - 测试马达 (马达不受算法影响运转，为了安全不要装桨叶！！！)\n"
-"ca - 校准陀螺仪加速度计\n"
+"ca - 校准陀螺仪加速度计（六面，带质量校验）\n"
+"cl - 水平零点校正（放平后自动写入配平）\n"
 "ps - 显示pitch/roll/yaw姿态\n"
 "cr - 校准RC遥控器\n"
 "rc - 显示RC遥控数据\n"
@@ -46,6 +47,7 @@ const char* motd =
 "time - 显示时间信息\n"
 "mot - 显示motor输出\n"
 "sys - 显示系统info信息\n"
+"prof - 打印主循环各段平均耗时（并清零）\n"
 "log [dump] - 打印日志\n"
 "reboot - 重启无人机\n"
 "reset - 重置无人机\n";
@@ -200,7 +202,9 @@ void doCommand(String str, bool echo = false) {
 	} else if (command == "cr") {
 		calibrateRC();
 	} else if (command == "ca") {
-		calibrateAccel();
+		calibrateAccelGuided(); // 手动扶平优化版：静止检测 + 质量校验 + 残差报告
+	} else if (command == "cl") {
+		calibrateLevel();        // 水平零点校正：按当前姿态自动写 CTL_TRIM_*
 	} else if (command == "mfr") {
 		testMotor(MOTOR_FRONT_RIGHT);
 	} else if (command == "mfl") {
@@ -209,9 +213,28 @@ void doCommand(String str, bool echo = false) {
 		testMotor(MOTOR_REAR_RIGHT);
 	} else if (command == "mrl") {
 		testMotor(MOTOR_REAR_LEFT);
+	} else if (command == "prof") {
+		extern uint32_t profUs[8];
+		extern uint32_t profN;
+		if (profN == 0) {
+			print("暂无采样，先让它跑几秒\n");
+		} else {
+			print("n=%lu  us/loop:\n", profN);
+			print("  imu    %lu\n", profUs[0] / profN);
+			print("  step   %lu\n", profUs[1] / profN);
+			print("  rc     %lu\n", profUs[2] / profN);
+			print("  web    %lu\n", profUs[3] / profN);
+			print("  est    %lu\n", profUs[4] / profN);
+			print("  ctl    %lu\n", profUs[5] / profN);
+			print("  cli+mav%lu\n", profUs[6] / profN);
+			print("  log    %lu\n", profUs[7] / profN);
+			profN = 0;
+			memset(profUs, 0, sizeof(profUs));
+		}
 	} else if (command == "sys") {
 #ifdef ESP32
 		print("Chip: %s\n", ESP.getChipModel());
+		print("CPU: %d MHz\n", getCpuFrequencyMhz());
 		print("Temperature: %.1f °C\n", temperatureRead());
 		print("Free heap: %d\n", ESP.getFreeHeap());
 		// Print tasks table

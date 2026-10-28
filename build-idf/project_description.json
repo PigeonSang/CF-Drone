@@ -1,7 +1,7 @@
 {
     "version":            "1.2",
     "project_name":       "CF-Drone",
-    "project_version":    "v1.0.0-25-gc7d90d7-dirty",
+    "project_version":    "v1.0.0-26-gfa77b7f-dirty",
     "project_path":       "D:/officeapp/Microsoft VS Code/CF-Drone",
     "idf_path":           "C:/Espressif/frameworks/esp-idf-v5.5.6",
     "build_dir":          "D:/officeapp/Microsoft VS Code/CF-Drone/build-idf",

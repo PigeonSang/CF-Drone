@@ -30,6 +30,13 @@ float levelGateThreshold = 0.2f; // 摇杆门控阈值，参数名：EST_LVL_GAT
 float levelBiasGain = 0;  // Mahony I 项增益（关闭，无法区分陀螺温漂与机械不对称时会起负作用）
 Vector levelGyroBias(0, 0, 0); // 由 applyLevel() 估计的虚拟陀螺偏置（rad/s）
 
+// ============== 飞行中的加计水平修正 ==============
+// 默认 0 = 关闭。开启后（建议 0.2~1.0）在"悬停近似静止"时用加速度计给出的
+// 真实重力方向，慢速把姿态估计拉回真值，专门抵消陀螺零偏/温漂导致的
+// "起飞后匀速平移、时间越长越偏"。
+// 参数名：EST_FLY_ACC
+float flightAccGain = 0;
+
 extern float controlRoll, controlPitch; // 飞手摇杆输入，定义于 CF-Drone.ino
 LowPassFilter<Vector> ratesFilter(0.2); // cutoff frequency ~ 40 Hz
 
@@ -53,13 +60,28 @@ void applyAcc() {
 	float accNorm = acc.norm();
 	landed = !motorsActive() && abs(accNorm - ONE_G) < ONE_G * 0.1f;
 
-	if (!landed) return;
+	if (landed) {
+		// calculate accelerometer correction
+		Vector up = Quaternion::rotateVector(Vector(0, 0, 1), attitude);
+		Vector correction = Vector::rotationVectorBetween(acc, up) * accWeight;
 
-	// calculate accelerometer correction
+		// apply correction
+		attitude = Quaternion::rotate(attitude, Quaternion::fromRotationVector(correction));
+		return;
+	}
+
+	// ---- 飞行中的慢速水平修正（可选，flightAccGain>0 时生效）----
+	// 原理：悬停近似静止时 ||acc|| ≈ 1g，加速度计方向即真实重力方向。
+	//       把它与估计的机体 Z 轴比较，按 flightAccGain 的时间常数慢慢拉回真值
+	//       （一阶互补滤波，时间常数 ≈ 1/flightAccGain 秒）。
+	// 门控：一旦有明显线加速度（|a| 偏离 1g 超过 5%）或正在打杆，就完全跳过，
+	//       否则会把"机动加速度"当成重力方向，反而制造倾斜。
+	if (flightAccGain <= 0) return;
+	if (fabsf(accNorm - ONE_G) > ONE_G * 0.05f) return;
+	if (max(fabsf(controlRoll), fabsf(controlPitch)) > 0.15f) return;
+
 	Vector up = Quaternion::rotateVector(Vector(0, 0, 1), attitude);
-	Vector correction = Vector::rotationVectorBetween(acc, up) * accWeight;
-
-	// apply correction
+	Vector correction = Vector::rotationVectorBetween(acc, up) * (flightAccGain * dt);
 	attitude = Quaternion::rotate(attitude, Quaternion::fromRotationVector(correction));
 }
 

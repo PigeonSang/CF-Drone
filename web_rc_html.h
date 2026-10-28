@@ -229,7 +229,7 @@ body.amateur #joystick-right{display:none}
           <button type="button" data-droll="0" data-dpitch="1">上<small>俯仰+</small></button>
           <span></span>
           <button type="button" data-droll="-1" data-dpitch="0">左<small>横滚−</small></button>
-          <div class="trim-center" id="trim-readout">横滚 +0.00°<br>俯仰 +0.00°</div>
+          <div class="trim-center" id="trim-readout">横滚 +0.000°<br>俯仰 +0.000°</div>
           <button type="button" data-droll="1" data-dpitch="0">右<small>横滚+</small></button>
           <span></span>
           <button type="button" data-droll="0" data-dpitch="-1">下<small>俯仰−</small></button>
@@ -273,7 +273,7 @@ let lastSentValues = { throttle:0, roll:0, pitch:0, yaw:0 };
 let lastForceSentTime = 0; // 上次强制重发的时间戳（performance.now()）
 let currentValues  = { throttle:0, roll:0, pitch:0, yaw:0 };
 let amateurMode = false;   // false=专业模式（双摇杆），true=起步模式（油门+配平键）
-const TRIM_STEP = 0.005;   // rad/次，约 0.3°，与 CTL_TRIM_* 建议步长一致
+const TRIM_STEP = 0.0001;  // rad/次，约 0.006°。按下后立即 POST，飞控本圈就用新配平
 const TRIM_REPEAT_MS = 160;
 let trimRoll = 0, trimPitch = 0;
 let trimBusy = false;
@@ -463,10 +463,30 @@ function checkAndSendChanges() {
 
 /*======================== 数据发送函数 ========================*/
 function sendJoystickData() {
-  sendToESP('/web_rc', { t:1, th:Math.round(currentValues.throttle), r:Math.round(currentValues.roll),
+  // 摇杆走"只保留最新一帧"的通道：
+  // 以前每个摇杆事件都直接 fetch，链路一卡，请求就在浏览器里无限排队，
+  // 恢复后几百条过期指令一次性涌入，飞控按顺序执行 → 表现为"延迟上万毫秒、
+  // 松杆后电机还在转"。现在最多只有一个请求在路上，中间帧直接丢弃。
+  sendJoystickCoalesced({ t:1, th:Math.round(currentValues.throttle), r:Math.round(currentValues.roll),
     p:Math.round(currentValues.pitch), y:Math.round(currentValues.yaw), ts:performance.now() });
   lastSentValues = {...currentValues};
   packetStats.sent++;
+}
+
+let joyBusy = false;      // 是否已有一个控制请求在途
+let joyLatest = null;     // 等待发送的最新一帧（覆盖旧值）
+
+function sendJoystickCoalesced(data) {
+  joyLatest = data;
+  if (joyBusy) return;    // 已有请求在途，只更新"最新帧"，不排队
+  joyBusy = true;
+  const pump = () => {
+    if (!joyLatest) { joyBusy = false; return; }
+    const d = joyLatest;
+    joyLatest = null;
+    sendToESP('/web_rc', d).then(pump, pump);
+  };
+  pump();
 }
 
 function sendButtonData(buttonIndex, state) {
@@ -477,7 +497,7 @@ function sendButtonData(buttonIndex, state) {
 function updateDisplayAll() {
   document.getElementById('left-y').textContent  = Math.round((currentValues.throttle + 100) / 2);
   if (amateurMode) {
-    const deg = rad => (rad * 180 / Math.PI).toFixed(2) + '°';
+    const deg = rad => (rad * 180 / Math.PI).toFixed(3) + '°';
     document.getElementById('right-x').textContent = deg(trimRoll);
     document.getElementById('right-y').textContent = deg(trimPitch);
   } else {
@@ -542,7 +562,7 @@ function updateJoystickPosition(side, clientX, clientY) {
 /*======================== 网络处理 ========================*/
 function sendToESP(url, data) {
   const t0 = performance.now();
-  fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data) })
+  return fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data) })
     .then(r => { if (!r.ok) throw new Error(); updateLatency(performance.now() - t0); return r.json(); })
     .then(resp => {
       consecutiveFails = 0;
@@ -561,6 +581,9 @@ function sendToESP(url, data) {
       }
 
       // ARM 状态更新（所有响应都同步显示）
+      if (typeof resp.v === 'number') {
+        document.getElementById('battery').textContent = resp.v > 0.5 ? resp.v.toFixed(2) + 'V' : '-';
+      }
       if (resp.arm !== undefined) {
         const el   = document.getElementById('armed-status');
         const item = document.getElementById('armed-status-item');
@@ -588,9 +611,9 @@ function sendToESP(url, data) {
             showToast('🛑 电机已停止');
         }
         if (resp.warn) showToast('⚠️ ' + resp.warn);
+      } else if (resp.warn) {
+        showToast('⚠️ ' + resp.warn);
       }
-      // 心跳包携带的系统警告（低电自动上锁等），不与按钮 toast 冲突
-      if (resp.rt === 4 && resp.warn) showToast('⚠️ ' + resp.warn);
     })
     .catch(() => {
       if (++consecutiveFails >= 3) updateConnectionStatus(false);
@@ -609,9 +632,6 @@ function updateLatency(latency) {
 function updateNetworkStatus() {
   const lr = packetStats.sent > 0 ? (packetStats.lost/packetStats.sent*100).toFixed(1) : '0';
   document.getElementById('packet-loss').textContent = lr + '%';
-  fetch('/web_rc/status').then(r=>r.json()).then(d => {
-    document.getElementById('battery').textContent = (d.voltage !== undefined && d.voltage !== null && d.voltage > 0.5) ? parseFloat(d.voltage).toFixed(2) + 'V' : '-';
-  }).catch(()=>{ document.getElementById('battery').textContent = '-'; });
 }
 
 function updateConnectionStatus(connected) {
@@ -688,7 +708,7 @@ function setAmateurMode(on) {
 function showTrimReadout() {
   const el = document.getElementById('trim-readout');
   if (!el) return;
-  const deg = rad => (rad >= 0 ? '+' : '') + (rad * 180 / Math.PI).toFixed(2) + '°';
+  const deg = rad => (rad >= 0 ? '+' : '') + (rad * 180 / Math.PI).toFixed(3) + '°';
   el.innerHTML = '横滚 ' + deg(trimRoll) + '<br>俯仰 ' + deg(trimPitch);
 }
 
@@ -940,11 +960,6 @@ function sendConsoleCmd() {
 /*======================== 事件绑定 ========================*/
 document.addEventListener('DOMContentLoaded', init);
 document.addEventListener('contextmenu', e => e.preventDefault());
-
-// 心跳：2000ms，连续3次失败才判定断连
-setInterval(() => {
-  if (connectionOk) sendToESP('/web_rc/heartbeat', {t:4, ts:performance.now()});
-}, 2000);
 </script>
 </body>
 </html>

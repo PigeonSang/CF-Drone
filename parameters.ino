@@ -38,6 +38,7 @@ extern int rcBaud;       // 串口波特率
 extern float trimRoll, trimPitch;         // 软件配平参数，定义于 control.ino
 extern float levelGateThreshold;         // 摇杆门控阈值，定义于 estimate.ino
 extern float levelBiasGain;              // Mahony I 项增益，定义于 estimate.ino
+extern float flightAccGain;              // 飞行中加计水平修正增益，定义于 estimate.ino
 extern Vector levelGyroBias;             // Mahony 虚拟陀螺偏置，定义于 estimate.ino
 
 Preferences storage;
@@ -132,6 +133,7 @@ Parameter parameters[] = {
 	// 注意：NVS 键名上限 15 字符，超了会 KEY_TOO_LONG 且永远存不进去
 	{"EST_LVL_GATE",     &levelGateThreshold}, // 摇杆门控阈值（0~1），摇杆偏转超过此比例时 applyLevel 权重渐变为零
 	{"EST_LVL_BIAS",     &levelBiasGain},      // Mahony I 项增益：重力误差积分进虚拟陀螺偏置的速率
+	{"EST_FLY_ACC",      &flightAccGain},      // 飞行中加计水平修正增益（0=关闭，0.2~1.0 有效；时间常数 ≈ 1/该值 秒）
 
 	// ===== 电机（引脚配置）=====
 	// 修改后立即调用 setupMotors() 重新初始化 LEDC 通道，无需重启。

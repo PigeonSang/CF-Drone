@@ -193,10 +193,14 @@ void setWebRCInput(float roll, float pitch, float yaw, float throttle, uint16_t 
     controlTime     = t;
 
     static float lastPrintedThrottle = -1.0f;
-    if (fabsf(pThrottle - lastPrintedThrottle) > 5.0f) {
+    static unsigned long lastPrintMs = 0;
+    unsigned long nowMs = millis();
+    // 打印走串口，缓冲满时会卡在这次 HTTP 回应之前。限制频率，避免推杆时把往返拖长。
+    if (fabsf(pThrottle - lastPrintedThrottle) > 5.0f && nowMs - lastPrintMs >= 500) {
         print("WebRC T=%.0f%% R=%.1f P=%.1f Y=%.1f Btn=0x%04X\n",
               pThrottle, pRoll, pPitch, pYaw, buttons);
         lastPrintedThrottle = pThrottle;
+        lastPrintMs = nowMs;
     }
 }
 
@@ -276,31 +280,32 @@ void handleWebRCRequest() {
     String body = webRCServer.arg("plain");
     if (handleJSONProtocol(body)) {
         char resp[320];
-        // warn 在按钮事件（rt=2）和心跳包（rt=4）响应中携带并清除：
-        //   rt=2：用户主动操作（解锁被拒等），需要即时反馈
-        //   rt=4：系统自动触发（低电自动上锁等），心跳周期≈2s，延迟可接受
-        // 摇杆包（rt=1）不消费 warn，避免摇杆包抢在 state=0 响应之前把 warn 清掉
-        bool deliverWarn = (lastProcType == 2 || lastProcType == 4) && webRCWarnMsg[0];
+        // 电量和警告都放进这一条回应。页面不再为心跳、电量另开连接，
+        // 否则它们和摇杆抢 WebServer 唯一的客户端槽，延迟会堆到上万毫秒。
+        // 用主循环里 0.5 秒更新的缓存，避免在这次回应里做 16 次 ADC。
+        float vbat = batteryVoltage;
+        if (isnan(vbat) || vbat < 0.0f) vbat = 0.0f;
+        bool deliverWarn = webRCWarnMsg[0] != '\0';
         if (deliverWarn) {
             if (lastProcButtonIdx >= 0) {
                 snprintf(resp, sizeof(resp),
-                    "{\"s\":\"ok\",\"m\":%d,\"arm\":%d,\"rt\":%d,\"bi\":%d,\"bs\":%d,\"warn\":\"%s\"}",
-                    mode, (int)armed, lastProcType, lastProcButtonIdx, lastProcButtonState, webRCWarnMsg);
+                    "{\"s\":\"ok\",\"m\":%d,\"arm\":%d,\"rt\":%d,\"bi\":%d,\"bs\":%d,\"warn\":\"%s\",\"v\":%.2f}",
+                    mode, (int)armed, lastProcType, lastProcButtonIdx, lastProcButtonState, webRCWarnMsg, vbat);
             } else {
                 snprintf(resp, sizeof(resp),
-                    "{\"s\":\"ok\",\"m\":%d,\"arm\":%d,\"rt\":%d,\"warn\":\"%s\"}",
-                    mode, (int)armed, lastProcType, webRCWarnMsg);
+                    "{\"s\":\"ok\",\"m\":%d,\"arm\":%d,\"rt\":%d,\"warn\":\"%s\",\"v\":%.2f}",
+                    mode, (int)armed, lastProcType, webRCWarnMsg, vbat);
             }
             webRCWarnMsg[0] = '\0'; // 发送后立即清空
         } else {
             if (lastProcButtonIdx >= 0) {
                 snprintf(resp, sizeof(resp),
-                    "{\"s\":\"ok\",\"m\":%d,\"arm\":%d,\"rt\":%d,\"bi\":%d,\"bs\":%d}",
-                    mode, (int)armed, lastProcType, lastProcButtonIdx, lastProcButtonState);
+                    "{\"s\":\"ok\",\"m\":%d,\"arm\":%d,\"rt\":%d,\"bi\":%d,\"bs\":%d,\"v\":%.2f}",
+                    mode, (int)armed, lastProcType, lastProcButtonIdx, lastProcButtonState, vbat);
             } else {
                 snprintf(resp, sizeof(resp),
-                    "{\"s\":\"ok\",\"m\":%d,\"arm\":%d,\"rt\":%d}",
-                    mode, (int)armed, lastProcType);
+                    "{\"s\":\"ok\",\"m\":%d,\"arm\":%d,\"rt\":%d,\"v\":%.2f}",
+                    mode, (int)armed, lastProcType, vbat);
             }
         }
         webRCServer.send(200, "application/json", resp);
@@ -327,12 +332,15 @@ static void handleRedirect8080() {
     if (!redirectServer8080) return;
     WiFiClient client = redirectServer8080->accept();
     if (!client) return;
+    // 请求还没到就立刻放掉。在这里空等会堵住主循环，摇杆 HTTP 也跟着停。
+    if (!client.available()) {
+        client.stop();
+        return;
+    }
+    client.setTimeout(20);
 
     String path = "/";
     String host = "";
-    unsigned long t0 = millis();
-    while (!client.available() && millis() - t0 < 200) {}
-
     if (client.available()) {
         // 解析请求行：GET /path HTTP/1.1
         String reqLine = client.readStringUntil('\n');
@@ -389,7 +397,7 @@ void setupWebRC() {
     // 姿态配平读写（等价于 p CTL_TRIM_ROLL / p CTL_TRIM_PITCH）
     webRCServer.on("/trim", HTTP_GET, []() {
         char json[96];
-        snprintf(json, sizeof(json), "{\"roll\":%.4f,\"pitch\":%.4f}", trimRoll, trimPitch);
+        snprintf(json, sizeof(json), "{\"roll\":%.6f,\"pitch\":%.6f}", trimRoll, trimPitch);
         webRCServer.send(200, "application/json", json);
     });
 
@@ -416,7 +424,7 @@ void setupWebRC() {
         bool ok1 = setParameter("CTL_TRIM_ROLL", nr);
         bool ok2 = setParameter("CTL_TRIM_PITCH", np);
         char json[96];
-        snprintf(json, sizeof(json), "{\"ok\":%d,\"roll\":%.4f,\"pitch\":%.4f}",
+        snprintf(json, sizeof(json), "{\"ok\":%d,\"roll\":%.6f,\"pitch\":%.6f}",
                  (ok1 && ok2) ? 1 : 0, trimRoll, trimPitch);
         webRCServer.send(200, "application/json", json);
     });

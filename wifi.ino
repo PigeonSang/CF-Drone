@@ -5,6 +5,7 @@
 #include <WiFi.h>
 #include <WiFiAP.h>
 #include <WiFiUdp.h>
+#include <esp_wifi.h>
 #include "Preferences.h"
 
 extern Preferences storage; // 复用主存储
@@ -25,6 +26,12 @@ void setupWiFi() {
 			storage.getString("WIFI_AP_SSID", "Ciallo～(∠・ω< )⌒★").c_str(),
 			storage.getString("WIFI_AP_PASS", "12345678").c_str()
 		);
+		// iPhone 的 802.11 省电和“低电量模式”无关，系统里关不掉。
+		// 11n 聚合帧重传时，同一加密序号会再进一次协议栈，于是报 CCMP replay。
+		// 遥控数据很小，热点只留 11b/g。
+		esp_wifi_set_ps(WIFI_PS_NONE);
+		esp_err_t wifiErr = esp_wifi_set_protocol(WIFI_IF_AP, WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G);
+		if (wifiErr != ESP_OK) print("WiFi 关闭 11n 失败: %d\n", (int)wifiErr);
 	} else if (wifiMode == W_STA) {
 		WiFi.begin(
 			storage.getString("WIFI_STA_SSID", "").c_str(),
@@ -37,11 +44,15 @@ void setupWiFi() {
 void sendWiFi(const uint8_t *buf, int len) {
 	if (WiFi.softAPgetStationNum() == 0 && !WiFi.isConnected()) return;
 
-	// 只有最近 5 秒真的收到过 MAVLink 包才发。
-	// 否则目标 IP 可能是失效的广播地址/旧地址：每次发送都要 ARP 重试并占住
-	// lwIP 的 pbuf，最终 endPacket() 持续报 ENOMEM(12) 刷屏。
+	// 必须"真的收到过"地面站的包才发。
+	// 注意：不能只用 now - mavlinkLastRxMs > 5000 判断——上电后
+	// mavlinkLastRxMs 初值是 0，前 5 秒会被误判成"刚收到过"，于是继续往
+	// 广播地址 255.255.255.255 空发，pbuf 耗尽后 endPacket() 报 ENOMEM(12)，
+	// lwIP 内存紧张会连带 HTTP 请求排队，表现为"开机后遥控延迟上千毫秒"。
 	extern unsigned long mavlinkLastRxMs;
+	extern bool mavlinkConnected;
 	unsigned long now = millis();
+	if (!mavlinkConnected) return;
 	if (now - mavlinkLastRxMs > 5000) return;
 
 	// 发失败后退避 1 秒，避免连续失败把 lwIP 内存打满
